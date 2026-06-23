@@ -1,0 +1,6 @@
+flask
+flask-mail
+pandas
+python-dotenv
+openpyxl
+gunicorn

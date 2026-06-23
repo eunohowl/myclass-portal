@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><title>Jadwal Kuliah Kelas 03TPLP002</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex font-sans">
+    <div class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between p-6">
+        <div>
+            <div class="flex items-center gap-3 px-2 mb-8"><div class="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-bold text-slate-950">IT</div><span class="font-bold text-md text-white">MY CLASS</span></div>
+            <nav class="space-y-2">
+                <a href="/dashboard" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition-all">Beranda</a>
+                <a href="/presensi" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition-all">Presensi</a>
+                <a href="/data_kelas" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition-all">Data Kelas & Searching</a>
+                <a href="/jadwal" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Jadwal Kuliah</a>
+            </nav>
+        </div>
+        <a href="/logout" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-rose-400 rounded-xl transition-all">Keluar Sistem</a>
+    </div>
+
+    <div class="flex-1 p-8 overflow-y-auto">
+        <h1 class="text-2xl font-bold mb-2">Jadwal Perkuliahan Reguler</h1>
+        <p class="text-sm text-slate-400 border-b border-slate-800 pb-4 mb-6">Daftar distribusi jam matakuliah terdaftar untuk ruang kelas {{ info_kelas.kelas }}.</p>
+
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Kelas</p>
+                <p class="text-sm font-semibold text-white">{{ info_kelas.kelas }}</p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Shift</p>
+                <p class="text-sm font-semibold text-white">{{ info_kelas.shift }}</p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Semester</p>
+                <p class="text-sm font-semibold text-white">{{ info_kelas.semester }}</p>
+            </div>
+            <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4">
+                <p class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-1">Total SKS</p>
+                <p class="text-sm font-bold text-emerald-400">{{ total_sks }} SKS</p>
+            </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase bg-slate-900/50">
+                        <th class="p-4">Kode Matkul</th>
+                        <th class="p-4">Nama Mata Kuliah</th>
+                        <th class="p-4">SKS</th>
+                        <th class="p-4">Dosen Pengampu</th>
+                        <th class="p-4">Hari</th>
+                        <th class="p-4">Jam Belajar</th>
+                        <th class="p-4">Ruang</th>
+                        <th class="p-4">Periode Aktif</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800 text-sm text-slate-300">
+                    {% for item in jadwal %}
+                    <tr class="hover:bg-slate-800/20 transition-colors">
+                        <td class="p-4 font-mono text-xs text-slate-400">{{ item.kode }}</td>
+                        <td class="p-4 font-semibold text-white">{{ item.matkul }}</td>
+                        <td class="p-4 font-mono text-emerald-400">{{ item.sks }} SKS</td>
+                        <td class="p-4 text-xs">{{ item.dosen }}</td>
+                        <td class="p-4 text-slate-400">{{ item.hari }}</td>
+                        <td class="p-4 font-mono text-xs text-teal-400">{{ item.jam }}</td>
+                        <td class="p-4 font-mono text-xs text-slate-400">{{ item.ruang }}</td>
+                        <td class="p-4 text-xs text-slate-500">{{ item.tgl_mulai }} – {{ item.tgl_selesai }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

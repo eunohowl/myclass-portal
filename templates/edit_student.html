@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><title>Edit Data Mahasiswa - MY UNPAM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex font-sans">
+    <div class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between p-6">
+        <div>
+            <div class="flex items-center gap-3 px-2 mb-8"><div class="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-bold text-slate-950">IT</div><span class="font-bold text-md text-white">MY CLASS</span></div>
+            <nav class="space-y-2">
+                <a href="/dashboard" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition-all">Beranda</a>
+                <a href="/presensi" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition-all">Presensi</a>
+                <a href="/data_kelas" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Data Kelas & Searching</a>
+                <a href="/jadwal" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition-all">Jadwal Kuliah</a>
+            </nav>
+        </div>
+        <a href="/logout" class="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-rose-400 rounded-xl transition-all">Keluar Sistem</a>
+    </div>
+
+    <div class="flex-1 p-8 overflow-y-auto flex items-start justify-center">
+        <div class="w-full max-w-lg">
+            <div class="mb-6">
+                <a href="/data_kelas" class="text-xs text-slate-400 hover:text-emerald-400 transition-all">← Kembali ke Data Kelas</a>
+                <h1 class="text-2xl font-bold mt-2">Edit Data Mahasiswa</h1>
+                <p class="text-sm text-slate-400 mt-1">Perbarui informasi mahasiswa di bawah ini.</p>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+                <form action="/edit_student/{{ mhs.nim }}" method="POST" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nama Lengkap</label>
+                        <input type="text" name="name" value="{{ mhs.name }}" required
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-colors">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">NIM</label>
+                        <input type="text" name="nim" value="{{ mhs.nim }}" required
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-colors font-mono">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">IPK (0–4)</label>
+                            <input type="number" name="ipk" step="0.01" min="0" max="4" value="{{ mhs.ipk }}" required
+                                class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Total Hadir (0–14)</label>
+                            <input type="number" name="hadir" min="0" max="14" value="{{ mhs.hadir }}" required
+                                class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-colors">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Status</label>
+                        <select name="status" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-300 focus:outline-none focus:border-emerald-500/50 transition-colors">
+                            <option value="Aktif" {% if mhs.status == 'Aktif' %}selected{% endif %}>Aktif</option>
+                            <option value="Nonaktif" {% if mhs.status == 'Nonaktif' %}selected{% endif %}>Nonaktif</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Jurusan / Prodi</label>
+                        <input type="text" name="jurusan" value="{{ mhs.jurusan }}"
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-colors">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Email Mahasiswa</label>
+                        <input type="email" name="email" value="{{ mhs.email }}"
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-colors">
+                    </div>
+                    <div class="flex gap-3 pt-2">
+                        <a href="/data_kelas" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm text-center transition-all">Batal</a>
+                        <button type="submit" class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl text-sm transition-all">
+                            💾 Simpan Perubahan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

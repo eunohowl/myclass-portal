@@ -319,7 +319,9 @@ def add_student():
         "jurusan": "Teknik Informatika"
     }
     students_db.append(new_mhs)
-    kirim_notifikasi(os.getenv('ADMIN_EMAIL', 'khlazieeed@gmail.com'), 'Update Database Portal', 'Data mahasiswa baru berhasil ditambahkan ke kelas 03TPLP002.')
+    # FIX: hanya kirim notifikasi jika email dikonfigurasi
+    if os.getenv('MAIL_PASSWORD'):
+        kirim_notifikasi(os.getenv('ADMIN_EMAIL', 'khlazieeed@gmail.com'), 'Update Database Portal', 'Data mahasiswa baru berhasil ditambahkan ke kelas 03TPLP002.')
     return redirect(url_for('dashboard', toast_type='success', toast_msg=f"✅ {new_mhs['name']} berhasil ditambahkan!"))
 
 @app.route('/delete_student/<nim>')
@@ -362,21 +364,24 @@ def profile(nim):
         return redirect(url_for('data_kelas', toast_type='error', toast_msg='❌ Data tidak ditemukan.'))
     return render_template('profile.html', mhs=mhs)
 
-# ── FEATURE BARU: KIRIM EMAIL KE MAHASISWA PERSONAL ──
+# ── FEATURE: KIRIM EMAIL KE MAHASISWA PERSONAL ──
 @app.route('/send_email_student/<nim>', methods=['POST'])
 def send_email_student(nim):
     if 'logged_in' not in session: return redirect(url_for('login'))
     global students_db
     mhs = next((m for m in students_db if str(m['nim']) == str(nim)), None)
-    
+
     if not mhs:
         return redirect(url_for('data_kelas', toast_type='error', toast_msg='❌ Mahasiswa tidak ditemukan!'))
-    
+
     target_email = mhs.get('email')
     if not target_email or "@" not in target_email:
         return redirect(url_for('data_kelas', toast_type='error', toast_msg=f'❌ Alamat email {mhs["name"]} tidak valid!'))
 
-    # Format Notifikasi Sesuai Permintaan Lu
+    # FIX: cek dulu apakah MAIL_PASSWORD sudah diset di server
+    if not os.getenv('MAIL_PASSWORD'):
+        return redirect(url_for('data_kelas', toast_type='error', toast_msg='❌ Fitur email belum dikonfigurasi di server!'))
+
     subject = f"Data Profil Mahasiswa - {mhs['name']}"
     body = f"Halo, Mahasiswa/i {mhs['name']},\n\n" \
            f"Berikut adalah data anda:\n" \
@@ -410,6 +415,7 @@ def upload_students():
     if added == 0 and errors:
         return redirect(url_for('dashboard', toast_type='error', toast_msg=f"❌ Import gagal: {errors[0]}"))
 
+    # FIX: hanya kirim notifikasi jika MAIL_PASSWORD sudah diset
     if added > 0 and os.getenv('MAIL_PASSWORD'):
         kirim_notifikasi(os.getenv('ADMIN_EMAIL', 'khlazieeed@gmail.com'), f'Import Massal: {added} Mahasiswa Baru',
             f'{added} data mahasiswa baru berhasil diimport ke kelas 03TPLP002. {skipped} data dilewati.')

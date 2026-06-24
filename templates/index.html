@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kampus360 — Pusat Data Mahasiswa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Outfit', sans-serif; background: #110d09; }
+        .mono { font-family: 'IBM Plex Mono', monospace; }
+
+        /* --- Solid panel card (replaces old glassmorphism look) --- */
+        .glass {
+            background: #1b150e;
+            border: 1.5px solid rgba(251,146,60,0.16);
+            box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 10px 30px rgba(0,0,0,0.35);
+        }
+
+        /* --- Pages --- */
+        .page {
+            display: none;
+            opacity: 0;
+        }
+        .page.active {
+            display: flex;
+            animation: pageIn 0.5s cubic-bezier(.22,.61,.36,1) forwards;
+        }
+        .page.leaving {
+            display: flex;
+            animation: pageOut 0.35s cubic-bezier(.55,0,.55,0.2) forwards;
+        }
+        @keyframes pageIn {
+            from { opacity: 0; transform: translateY(18px) scale(0.985); filter: blur(4px); }
+            to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+        }
+        @keyframes pageOut {
+            from { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+            to   { opacity: 0; transform: translateY(-14px) scale(0.985); filter: blur(4px); }
+        }
+
+        /* --- Gradient text --- */
+        .grad-text {
+            background: linear-gradient(135deg, #fb923c 0%, #22d3ee 50%, #2dd4bf 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* --- Animated background blobs --- */
+        .blob {
+            position: fixed; border-radius: 9999px;
+            filter: blur(80px); opacity: 0.08; pointer-events: none; z-index: 0;
+            animation: drift 18s ease-in-out infinite alternate;
+        }
+        .blob-1 { width: 500px; height: 500px; background: #f97316; top: -100px; left: -100px; }
+        .blob-2 { width: 400px; height: 400px; background: #0891b2; bottom: -100px; right: -100px; animation-delay: -6s; }
+        .blob-3 { width: 350px; height: 350px; background: #0d9488; top: 40%; left: 40%; animation-delay: -12s; }
+        @keyframes drift {
+            from { transform: translate(0,0) scale(1); }
+            to   { transform: translate(40px, 30px) scale(1.08); }
+        }
+
+        /* --- Toast notification --- */
+        #toast-container {
+            position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+            display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+        }
+        .toast-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 14px 18px; border-radius: 14px;
+            font-size: 13px; font-weight: 600;
+            animation: toastIn 0.35s cubic-bezier(.22,.61,.36,1) forwards;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            max-width: 340px;
+        }
+        .toast-item.out { animation: toastOut 0.3s ease forwards; }
+        @keyframes toastIn  { from { transform: translateX(120%); opacity:0; } to { transform: translateX(0); opacity:1; } }
+        @keyframes toastOut { from { transform: translateX(0); opacity:1; } to { transform: translateX(120%); opacity:0; } }
+        .toast-dot { width: 8px; height: 8px; border-radius: 9999px; flex-shrink: 0; }
+        .toast-meta { font-size: 11px; font-weight: 400; opacity: 0.6; margin-top: 2px; }
+
+        /* --- Table row --- */
+        .trow { transition: background 0.15s; cursor: default; }
+        .trow:hover { background: rgba(255,255,255,0.04); }
+        .trow.flash { animation: rowFlash 0.7s ease; }
+        @keyframes rowFlash {
+            0%,100% { background: transparent; }
+            40%      { background: rgba(251,146,60,0.12); }
+        }
+
+        /* --- Inputs --- */
+        .inp {
+            width: 100%; padding: 10px 14px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px; color: #f1f5f9; font-size: 13px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+        .inp:focus {
+            border-color: rgba(251,146,60,0.6);
+            box-shadow: 0 0 0 3px rgba(251,146,60,0.12);
+        }
+        .inp::placeholder { color: rgba(255,255,255,0.2); }
+
+        /* --- Buttons --- */
+        .btn-primary {
+            background: linear-gradient(135deg, #f97316, #e11d48);
+            color: white; font-weight: 700; border-radius: 10px;
+            padding: 10px 20px; font-size: 13px;
+            transition: opacity 0.2s, transform 0.15s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s;
+            border: none; cursor: pointer;
+            box-shadow: 0 0 0 0 rgba(249,115,22,0);
+            position: relative; overflow: hidden;
+        }
+        .btn-primary:hover { opacity: 0.92; transform: translateY(-2px) scale(1.015); box-shadow: 0 6px 20px rgba(249,115,22,0.35); }
+        .btn-primary:active { transform: translateY(0) scale(0.97); box-shadow: 0 2px 8px rgba(249,115,22,0.25); }
+
+        .btn-ghost {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #94a3b8; border-radius: 10px;
+            padding: 10px 16px; font-size: 13px; font-weight: 600;
+            transition: all 0.18s cubic-bezier(.34,1.56,.64,1); cursor: pointer;
+        }
+        .btn-ghost:hover { background: rgba(255,255,255,0.1); color: #f1f5f9; transform: translateY(-2px) scale(1.015); box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
+        .btn-ghost:active { transform: translateY(0) scale(0.97); }
+
+        /* --- Nav links interactive --- */
+        .nav-link, button { transition: all 0.18s cubic-bezier(.34,1.56,.64,1); }
+        button:active { transform: scale(0.97); }
+
+        /* --- Time Complexity collapsible panel --- */
+        #tc-body {
+            overflow: hidden;
+            max-height: 0;
+            opacity: 0;
+            transition: max-height 0.45s cubic-bezier(.22,.61,.36,1), opacity 0.35s ease, margin-top 0.45s ease;
+        }
+        #tc-body.expanded {
+            max-height: 900px;
+            opacity: 1;
+            margin-top: 1rem;
+        }
+        #tc-toggle-icon { transition: transform 0.35s cubic-bezier(.34,1.56,.64,1); display: inline-block; }
+        #tc-toggle-icon.rotated { transform: rotate(180deg); }
+        #tc-toggle-btn {
+            transition: all 0.18s cubic-bezier(.34,1.56,.64,1); cursor: pointer;
+            user-select: none;
+        }
+        #tc-toggle-btn:hover { transform: translateY(-1px); }
+        #tc-toggle-btn:active { transform: scale(0.97); }
+        #tc-summary {
+            transition: opacity 0.3s ease;
+        }
+
+        /* --- Badge --- */
+        .badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+            padding: 3px 10px; border-radius: 99px;
+        }
+
+        /* --- IPK color scale --- */
+        .ipk-excellent { color: #2dd4bf; }
+        .ipk-good      { color: #22d3ee; }
+        .ipk-average   { color: #fbbf24; }
+        .ipk-low       { color: #f87171; }
+
+        /* --- Scrollbar --- */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+
+        /* --- Search result cards --- */
+        .result-card {
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 12px; padding: 12px 16px;
+            display: flex; align-items: center; gap-14px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .result-card:hover {
+            background: rgba(251,146,60,0.08);
+            border-color: rgba(251,146,60,0.3);
+        }
+
+        /* --- Nav active indicator --- */
+        .nav-link { padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #64748b; transition: all 0.2s; cursor: pointer; }
+        .nav-link:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
+        .nav-link.active { color: #fb923c; background: rgba(251,146,60,0.1); }
+
+        /* --- Email modal --- */
+        #email-modal { display: none; }
+        #email-modal.show { display: flex; animation: modalIn 0.2s ease forwards; }
+        #import-modal { display: none; }
+        #import-modal.show { display: flex; animation: modalIn 0.2s ease forwards; }
+        .mode-option {
+            cursor: pointer; flex: 1; padding: 10px 12px; border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04);
+            transition: all 0.18s cubic-bezier(.34,1.56,.64,1);
+        }
+        .mode-option:hover { background: rgba(255,255,255,0.07); }
+        .mode-option.active { border-color: rgba(251,146,60,0.6); background: rgba(251,146,60,0.1); }
+        .import-error-row { font-size: 11px; color: #f87171; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        @keyframes modalIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="text-stone-100 min-h-screen">
+
+<!-- Background blobs -->
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- ================================================================
+     LOGIN PAGE
+================================================================ -->
+<div id="page-login" class="page active items-center justify-center min-h-screen relative z-10 p-4">
+    <div class="w-full max-w-md">
+        <!-- Brand -->
+        <div class="text-center mb-10">
+            <div class="inline-flex items-center gap-2 mb-5">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-rose-600 flex items-center justify-center text-lg">🪪</div>
+                <span class="text-2xl font-extrabold grad-text">Kampus360</span>
+            </div>
+            <h1 class="text-3xl font-extrabold text-white mb-2">Hai, Selamat Datang</h1>
+            <p class="text-stone-500 text-sm">Masuk untuk membuka panel data mahasiswa kampus</p>
+        </div>
+
+        <div class="glass rounded-2xl p-8 shadow-2xl relative z-10">
+            <div class="mb-5">
+                <label class="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Username</label>
+                <input id="login-user" type="text" class="inp" placeholder="Masukkan username">
+            </div>
+            <div class="mb-7">
+                <label class="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Password</label>
+                <input id="login-pass" type="password" class="inp" placeholder="••••••••">
+            </div>
+            <button onclick="doLogin()" class="btn-primary w-full py-3 text-sm rounded-xl">
+                Masuk ke Dashboard →
+            </button>
+            <p id="login-err" class="text-red-400 text-xs mt-4 text-center hidden"></p>
+        </div>
+
+        <p class="text-center text-stone-600 text-xs mt-6 mono">Kampus360 v2.0 · Python Flask + OOP Blueprint</p>
+    </div>
+</div>
+
+<!-- ================================================================
+     MAIN DASHBOARD
+================================================================ -->
+<div id="page-main" class="page flex-col min-h-screen relative z-10">
+
+    <!-- Navbar -->
+    <header class="glass border-b border-white/5 px-6 py-3.5 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-rose-600 flex items-center justify-center text-sm">🪪</div>
+            <span class="font-extrabold text-white text-base">Kampus360</span>
+            <span class="badge bg-orange-500/10 text-orange-300 border border-orange-500/20">Flask OOP</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-stone-500 mr-2">Logged in as <strong id="nav-user" class="text-orange-400"></strong></span>
+            <button onclick="openImportModal()" class="btn-ghost text-xs py-2 px-3 flex items-center gap-1.5">
+                <span>⬆</span> Import Excel
+            </button>
+            <button onclick="exportExcel()" class="btn-ghost text-xs py-2 px-3 flex items-center gap-1.5">
+                <span>⬇</span> Export Excel
+            </button>
+            <button onclick="doLogout()" class="text-xs bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 px-3 py-2 rounded-lg transition font-bold">Logout</button>
+        </div>
+    </header>
+
+    <main class="flex-1 p-5 grid grid-cols-1 lg:grid-cols-3 gap-5 max-w-[1400px] mx-auto w-full">
+
+        <!-- ---- FORM PANEL ---- -->
+        <div class="lg:col-span-1">
+            <div class="glass rounded-2xl p-6 sticky top-20">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="font-bold text-white text-sm">Form Mahasiswa</h3>
+                    <span id="form-mode-badge" class="badge bg-rose-500/10 text-rose-300 border border-rose-500/20">CREATE</span>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5">NIM <span class="text-stone-600 normal-case font-normal">(min. 5 digit angka)</span></label>
+                        <input id="f-nim" type="text" class="inp mono" placeholder="202601001">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5">Nama Mahasiswa</label>
+                        <input id="f-nama" type="text" class="inp" placeholder="Nama Lengkap">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5">Program Studi</label>
+                        <input id="f-prodi" type="text" class="inp" placeholder="Teknik Informatika">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5">Email</label>
+                        <input id="f-email" type="email" class="inp" placeholder="nama@student.ac.id">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5">IPK <span class="text-stone-600 normal-case font-normal">(0.00 – 4.00)</span></label>
+                        <input id="f-ipk" type="number" step="0.01" min="0" max="4" class="inp mono" placeholder="3.75">
+                    </div>
+                </div>
+
+                <div class="flex gap-2 mt-6">
+                    <button id="btn-submit" onclick="submitForm()" class="btn-primary flex-1 py-2.5">
+                        Simpan Data
+                    </button>
+                    <button onclick="resetForm()" class="btn-ghost py-2.5 px-4">✕</button>
+                </div>
+
+                <div class="mt-5 p-3 rounded-xl mono text-[10px] text-stone-600" style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.04)">
+                    <span class="text-orange-400">save_to_file()</span> → auto-save ke <span class="text-amber-400">mahasiswa.json</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ---- TABLE PANEL ---- -->
+        <div class="lg:col-span-2 flex flex-col gap-4">
+
+            <!-- Search & Sort bar -->
+            <div class="glass rounded-2xl p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Search -->
+                <div>
+                    <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Pencarian</label>
+                    <div class="flex gap-2">
+                        <input id="search-input" type="text" onkeydown="if(event.key==='Enter') doSearch()"
+                            class="inp flex-1" placeholder="NIM atau Nama...">
+                        <button onclick="doSearch()" class="btn-primary px-4 py-2.5 text-xs">Cari</button>
+                    </div>
+                    <p class="text-[10px] text-stone-600 mt-1.5">NIM → ke detail &nbsp;·&nbsp; Nama → filter tabel</p>
+
+                    <!-- Search results dropdown -->
+                    <div id="search-results" class="mt-3 space-y-2 hidden"></div>
+                </div>
+
+                <!-- Sort -->
+                <div>
+                    <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Pengurutan</label>
+                    <div class="flex gap-2">
+                        <select id="sort-method" class="inp flex-1 text-xs">
+                            <option value="merge">Merge Sort — by NIM</option>
+                            <option value="shell">Shell Sort — by Nama</option>
+                        </select>
+                        <button onclick="doSort()" class="btn-ghost px-3 py-2 text-xs font-bold">↕ Urutkan</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats row -->
+            <div class="grid grid-cols-3 gap-3" id="stats-row">
+                <div class="glass rounded-xl p-4">
+                    <p class="text-[10px] text-stone-500 uppercase tracking-widest mb-1">Total</p>
+                    <p id="stat-total" class="text-2xl font-extrabold text-white">0</p>
+                </div>
+                <div class="glass rounded-xl p-4">
+                    <p class="text-[10px] text-stone-500 uppercase tracking-widest mb-1">Rata-rata IPK</p>
+                    <p id="stat-ipk" class="text-2xl font-extrabold text-orange-400">0.00</p>
+                </div>
+                <div class="glass rounded-xl p-4">
+                    <p class="text-[10px] text-stone-500 uppercase tracking-widest mb-1">Prodi</p>
+                    <p id="stat-prodi" class="text-2xl font-extrabold text-cyan-400">0</p>
+                </div>
+            </div>
+
+            <!-- Time Complexity Panel -->
+            <div class="glass rounded-2xl p-5">
+                <div id="tc-toggle-btn" onclick="toggleComplexity()" class="flex items-center justify-between">
+                    <h3 class="font-bold text-white text-sm flex items-center gap-2">
+                        <span class="w-5 h-5 rounded-md bg-orange-500/20 flex items-center justify-center text-orange-400 text-xs">Ω</span>
+                        Estimasi Time Complexity
+                        <span id="tc-summary" class="text-[10px] text-stone-500 font-normal mono">· n=<span id="tc-n-mini">0</span> · klik untuk detail</span>
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <span class="badge bg-stone-700/40 text-stone-500 border border-stone-600/20 mono">n = <span id="tc-n">0</span> data</span>
+                        <span id="tc-toggle-icon" class="text-stone-500 text-xs">▼</span>
+                    </div>
+                </div>
+                <div id="tc-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <!-- Merge Sort -->
+                    <div class="rounded-xl p-3 text-center" style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2)">
+                        <p class="mono font-extrabold text-orange-400 text-base">O(n log n)</p>
+                        <p class="text-[10px] text-stone-500 mt-1 font-semibold uppercase tracking-wider">Merge Sort</p>
+                        <p id="tc-merge" class="mono text-[10px] text-orange-300/60 mt-1">— ops</p>
+                    </div>
+                    <!-- Shell Sort -->
+                    <div class="rounded-xl p-3 text-center" style="background:rgba(225,29,72,0.08);border:1px solid rgba(225,29,72,0.2)">
+                        <p class="mono font-extrabold text-rose-400 text-base">O(n log²n)</p>
+                        <p class="text-[10px] text-stone-500 mt-1 font-semibold uppercase tracking-wider">Shell Sort</p>
+                        <p id="tc-shell" class="mono text-[10px] text-rose-300/60 mt-1">— ops</p>
+                    </div>
+                    <!-- Linear Search -->
+                    <div class="rounded-xl p-3 text-center" style="background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2)">
+                        <p class="mono font-extrabold text-cyan-400 text-base">O(n)</p>
+                        <p class="text-[10px] text-stone-500 mt-1 font-semibold uppercase tracking-wider">Cari Nama</p>
+                        <p id="tc-search" class="mono text-[10px] text-cyan-300/60 mt-1">— ops</p>
+                    </div>
+                    <!-- CRUD -->
+                    <div class="rounded-xl p-3 text-center" style="background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.2)">
+                        <p class="mono font-extrabold text-teal-400 text-base">O(n)</p>
+                        <p class="text-[10px] text-stone-500 mt-1 font-semibold uppercase tracking-wider">Add/Edit/Del</p>
+                        <p id="tc-crud" class="mono text-[10px] text-teal-300/60 mt-1">— ops</p>
+                    </div>
+                </div>
+                <!-- Detail breakdown table -->
+                <div class="rounded-xl overflow-hidden mono text-[11px]" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05)">
+                    <div class="grid grid-cols-4 px-4 py-2 text-[9px] uppercase tracking-widest text-stone-600 border-b border-white/5">
+                        <span>Operasi</span><span>Best</span><span>Average</span><span>Worst</span>
+                    </div>
+                    <div class="divide-y divide-white/[0.04]">
+                        <div class="grid grid-cols-4 px-4 py-2 items-center hover:bg-white/[0.02]">
+                            <span class="text-stone-400 font-semibold">Merge Sort</span>
+                            <span class="text-teal-400">O(n log n)</span>
+                            <span class="text-teal-400">O(n log n)</span>
+                            <span class="text-teal-400">O(n log n)</span>
+                        </div>
+                        <div class="grid grid-cols-4 px-4 py-2 items-center hover:bg-white/[0.02]">
+                            <span class="text-stone-400 font-semibold">Shell Sort</span>
+                            <span class="text-cyan-400">O(n log n)</span>
+                            <span class="text-amber-400">O(n log²n)</span>
+                            <span class="text-red-400">O(n²)</span>
+                        </div>
+                        <div class="grid grid-cols-4 px-4 py-2 items-center hover:bg-white/[0.02]">
+                            <span class="text-stone-400 font-semibold">Cari NIM</span>
+                            <span class="text-teal-400">O(1)</span>
+                            <span class="text-cyan-400">O(n/2)</span>
+                            <span class="text-amber-400">O(n)</span>
+                        </div>
+                        <div class="grid grid-cols-4 px-4 py-2 items-center hover:bg-white/[0.02]">
+                            <span class="text-stone-400 font-semibold">Cari Nama</span>
+                            <span class="text-teal-400">O(1)</span>
+                            <span class="text-cyan-400">O(n)</span>
+                            <span class="text-amber-400">O(n)</span>
+                        </div>
+                        <div class="grid grid-cols-4 px-4 py-2 items-center hover:bg-white/[0.02]">
+                            <span class="text-stone-400 font-semibold">Tambah</span>
+                            <span class="text-teal-400">O(1)</span>
+                            <span class="text-teal-400">O(1)</span>
+                            <span class="text-teal-400">O(1)</span>
+                        </div>
+                        <div class="grid grid-cols-4 px-4 py-2 items-center hover:bg-white/[0.02]">
+                            <span class="text-stone-400 font-semibold">Edit / Hapus</span>
+                            <span class="text-teal-400">O(1)</span>
+                            <span class="text-cyan-400">O(n)</span>
+                            <span class="text-amber-400">O(n)</span>
+                        </div>
+                        <div class="grid grid-cols-4 px-4 py-2 items-center hover:bg-white/[0.02]">
+                            <span class="text-stone-400 font-semibold">Load Semua</span>
+                            <span class="text-cyan-400">O(n)</span>
+                            <span class="text-cyan-400">O(n)</span>
+                            <span class="text-cyan-400">O(n)</span>
+                        </div>
+                        <div class="grid grid-cols-4 px-4 py-2 items-center hover:bg-white/[0.02]">
+                            <span class="text-stone-400 font-semibold">Export Excel</span>
+                            <span class="text-cyan-400">O(n)</span>
+                            <span class="text-cyan-400">O(n)</span>
+                            <span class="text-cyan-400">O(n)</span>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-[10px] text-stone-700 mt-3 text-center">Estimasi ops dihitung berdasarkan n data aktif saat ini</p>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="glass rounded-2xl overflow-hidden flex flex-col">
+                <div class="px-5 py-4 border-b border-white/5 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <h3 class="font-bold text-white text-sm">Data Mahasiswa</h3>
+                        <span id="count-badge" class="badge bg-stone-700/50 text-stone-400 border border-stone-600/30">0 data</span>
+                    </div>
+                    <button onclick="resetFilter()" class="text-xs text-stone-500 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg transition font-semibold">Reset</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-[10px] text-stone-500 uppercase tracking-widest border-b border-white/5" style="background:rgba(0,0,0,0.2)">
+                                <th class="px-5 py-3 text-left">NIM</th>
+                                <th class="px-5 py-3 text-left">Nama</th>
+                                <th class="px-5 py-3 text-left">Prodi</th>
+                                <th class="px-5 py-3 text-left">Email</th>
+                                <th class="px-5 py-3 text-center">IPK</th>
+                                <th class="px-5 py-3 text-right">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body" class="divide-y divide-white/[0.04]">
+                            <tr><td colspan="6" class="px-5 py-10 text-center text-stone-600">Memuat data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- ================================================================
+     DETAIL PAGE
+================================================================ -->
+<div id="page-detail" class="page items-center justify-center min-h-screen p-6 relative z-10">
+    <div class="w-full max-w-xl">
+
+        <button onclick="showPage('main')" class="flex items-center gap-2 text-stone-500 hover:text-white text-sm font-semibold mb-6 transition">
+            ← Kembali ke Dashboard
+        </button>
+
+        <div class="glass rounded-2xl overflow-hidden shadow-2xl">
+            <!-- Header -->
+            <div class="p-6 border-b border-white/5" style="background:linear-gradient(135deg,rgba(249,115,22,0.15),rgba(79,70,229,0.1))">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <span class="badge bg-teal-500/20 text-teal-300 border border-teal-500/20 mb-3">✓ Data Ditemukan</span>
+                        <h2 class="text-xl font-extrabold text-white">Detail Mahasiswa</h2>
+                        <p class="text-stone-500 text-xs mt-0.5 mono">Linear Search · O(n)</p>
+                    </div>
+                    <div id="detail-avatar" class="w-14 h-14 rounded-xl bg-gradient-to-br from-orange-500 to-rose-600 flex items-center justify-center text-2xl font-bold text-white">?</div>
+                </div>
+            </div>
+
+            <!-- Fields -->
+            <div class="p-6 space-y-0 divide-y divide-white/5">
+                <div class="py-3.5 flex justify-between items-center">
+                    <span class="text-stone-500 text-xs font-semibold uppercase tracking-wider">NIM</span>
+                    <span id="d-nim" class="mono text-amber-400 font-bold text-lg">-</span>
+                </div>
+                <div class="py-3.5 flex justify-between items-center">
+                    <span class="text-stone-500 text-xs font-semibold uppercase tracking-wider">Nama</span>
+                    <span id="d-nama" class="font-bold text-white text-base">-</span>
+                </div>
+                <div class="py-3.5 flex justify-between items-center">
+                    <span class="text-stone-500 text-xs font-semibold uppercase tracking-wider">Program Studi</span>
+                    <span id="d-prodi" class="text-stone-300 text-sm">-</span>
+                </div>
+                <div class="py-3.5 flex justify-between items-center">
+                    <span class="text-stone-500 text-xs font-semibold uppercase tracking-wider">Email</span>
+                    <span id="d-email" class="text-cyan-400 text-sm mono">-</span>
+                </div>
+                <div class="py-3.5 flex justify-between items-center">
+                    <span class="text-stone-500 text-xs font-semibold uppercase tracking-wider">IPK</span>
+                    <span id="d-ipk" class="font-extrabold text-2xl">-</span>
+                </div>
+            </div>
+
+            <!-- Polymorphism output -->
+            <div class="px-6 pb-5">
+                <div class="rounded-xl p-4 mono text-xs" style="background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.06)">
+                    <p class="text-stone-600 mb-1">// display_info() — Polymorphism:</p>
+                    <p id="d-poly" class="text-orange-400 leading-relaxed">-</p>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="px-6 py-4 border-t border-white/5 flex justify-between items-center gap-2" style="background:rgba(0,0,0,0.2)">
+                <div class="flex gap-2">
+                    <button onclick="editFromDetail()" class="btn-ghost text-xs py-2 px-4 text-cyan-400 border-cyan-500/20">✏️ Edit Data</button>
+                    <button onclick="openEmailModalFor(detailData)" class="btn-ghost text-xs py-2 px-4 text-teal-400 border-teal-500/20">📧 Kirim Email</button>
+                </div>
+                <button onclick="showPage('main')" class="btn-primary text-xs py-2 px-5">← Kembali</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     EMAIL MODAL — Kirim Pesan ke Mahasiswa (Gmail SMTP)
+================================================================ -->
+<div id="email-modal" class="fixed inset-0 z-[9998] items-center justify-center p-4" style="background:rgba(0,0,0,0.65); backdrop-filter:blur(4px);" onclick="if(event.target===this) closeEmailModal()">
+    <div class="glass rounded-2xl w-full max-w-md p-6 shadow-2xl" style="background:rgba(27,21,14,0.97)">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-white text-sm flex items-center gap-2">📧 Kirim Email ke Mahasiswa</h3>
+            <button onclick="closeEmailModal()" class="text-stone-500 hover:text-white text-lg leading-none">✕</button>
+        </div>
+        <p class="text-xs text-stone-500 mb-4">
+            Kepada: <span id="email-to-name" class="text-teal-400 font-semibold">-</span>
+            <span class="mono text-stone-600"> · </span>
+            <span id="email-to-addr" class="mono text-stone-400">-</span>
+        </p>
+        <div class="space-y-3">
+            <div>
+                <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5">Subjek</label>
+                <input id="email-subject" type="text" class="inp" placeholder="Subjek email">
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5">Pesan</label>
+                <textarea id="email-body" rows="6" class="inp" placeholder="Tulis pesan..."></textarea>
+            </div>
+        </div>
+        <div class="flex gap-2 mt-6">
+            <button id="btn-send-email" onclick="sendEmailToMahasiswa()" class="btn-primary flex-1 py-2.5">Kirim Email</button>
+            <button onclick="closeEmailModal()" class="btn-ghost py-2.5 px-4">Batal</button>
+        </div>
+        <p class="text-[10px] text-stone-600 mt-3 text-center mono">EmailService.send() → Gmail SMTP (smtp.gmail.com:465)</p>
+    </div>
+</div>
+
+<!-- ================================================================
+     IMPORT EXCEL MODAL
+================================================================ -->
+<div id="import-modal" class="fixed inset-0 z-[9998] items-center justify-center p-4" style="background:rgba(0,0,0,0.65); backdrop-filter:blur(4px);" onclick="if(event.target===this) closeImportModal()">
+    <div class="glass rounded-2xl w-full max-w-md p-6 shadow-2xl" style="background:rgba(27,21,14,0.97)">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-white text-sm flex items-center gap-2">⬆ Import Data dari Excel</h3>
+            <button onclick="closeImportModal()" class="text-stone-500 hover:text-white text-lg leading-none">✕</button>
+        </div>
+        <p class="text-xs text-stone-500 mb-4">
+            Header kolom yang dikenali: <span class="mono text-orange-300">NIM, Nama, Program Studi, Email, IPK</span>.
+            Kolom Email & IPK opsional.
+        </p>
+
+        <div id="import-form-area" class="space-y-4">
+            <div>
+                <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5">File Excel (.xlsx)</label>
+                <input id="import-file" type="file" accept=".xlsx,.xlsm" class="inp text-xs">
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5">Jika NIM sudah terdaftar</label>
+                <div class="flex gap-2">
+                    <div id="mode-skip" class="mode-option active" onclick="setImportMode('skip')">
+                        <p class="text-xs font-bold text-stone-200">Lewati</p>
+                        <p class="text-[10px] text-stone-500">Data lama dipertahankan</p>
+                    </div>
+                    <div id="mode-update" class="mode-option" onclick="setImportMode('update')">
+                        <p class="text-xs font-bold text-stone-200">Timpa</p>
+                        <p class="text-[10px] text-stone-500">Data lama diganti baru</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="import-result-area" class="hidden space-y-2"></div>
+
+        <div class="flex gap-2 mt-6">
+            <button id="btn-do-import" onclick="doImportExcel()" class="btn-primary flex-1 py-2.5">Mulai Import</button>
+            <button onclick="closeImportModal()" class="btn-ghost py-2.5 px-4">Tutup</button>
+        </div>
+        <p class="text-[10px] text-stone-600 mt-3 text-center mono">MahasiswaManager.import_from_excel_bytes() → openpyxl</p>
+    </div>
+</div>
+
+<!-- ================================================================
+     SCRIPTS
+================================================================ -->
+<script>
+    let currentUser = '';
+    let editingNim = null;
+    let detailData = null;
+
+    // ---- Page router with smooth transition ----
+    let pageTransitioning = false;
+    function showPage(id) {
+        if (pageTransitioning) return;
+        const current = document.querySelector('.page.active');
+        const next = document.getElementById('page-' + id);
+        if (!current || current === next) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active', 'leaving'));
+            next.classList.add('active');
+            if (id === 'main') loadTable();
+            return;
+        }
+        pageTransitioning = true;
+        current.classList.remove('active');
+        current.classList.add('leaving');
+        setTimeout(() => {
+            current.classList.remove('leaving');
+            document.querySelectorAll('.page').forEach(p => { if (p !== next) p.classList.remove('active'); });
+            next.classList.add('active');
+            if (id === 'main') loadTable();
+            setTimeout(() => { pageTransitioning = false; }, 500);
+        }, 320);
+    }
+
+    // ---- Time Complexity toggle ----
+    let tcExpanded = false;
+    function toggleComplexity() {
+        tcExpanded = !tcExpanded;
+        const body = document.getElementById('tc-body');
+        const icon = document.getElementById('tc-toggle-icon');
+        const summary = document.getElementById('tc-summary');
+        if (tcExpanded) {
+            body.classList.add('expanded');
+            icon.classList.add('rotated');
+            summary.style.opacity = '0';
+        } else {
+            body.classList.remove('expanded');
+            icon.classList.remove('rotated');
+            summary.style.opacity = '1';
+        }
+    }
+
+    // ---- Toast system ----
+    let toastId = 0;
+    function formatDuration(ms) {
+        if (ms < 1000) return `${ms} ms`;
+        return `${(ms / 1000).toFixed(2)} s`;
+    }
+    function toast(msg, type = 'success', ms = null, durationMs = 3500) {
+        const container = document.getElementById('toast-container');
+        const id = ++toastId;
+
+        const configs = {
+            success: { dot: '#2dd4bf', bg: 'rgba(19,78,74,0.9)',  border: 'rgba(45,212,191,0.2)',  icon: '✓' },
+            error:   { dot: '#f87171', bg: 'rgba(69,10,10,0.9)',  border: 'rgba(248,113,113,0.2)', icon: '✕' },
+            info:    { dot: '#22d3ee', bg: 'rgba(12,74,110,0.9)', border: 'rgba(34,211,238,0.2)',  icon: 'ℹ' },
+            warn:    { dot: '#fbbf24', bg: 'rgba(78,53,0,0.9)',   border: 'rgba(251,191,36,0.2)',  icon: '⚠' },
+        };
+        const cfg = configs[type] || configs.success;
+        // Meta line menampilkan lama proses berlangsung (ms/s), bukan jam dinding.
+        const metaHtml = (typeof ms === 'number' && !isNaN(ms))
+            ? `<div class="toast-meta">⏱ Diproses dalam ${formatDuration(ms)}</div>`
+            : '';
+
+        const el = document.createElement('div');
+        el.id = 'toast-' + id;
+        el.className = 'toast-item';
+        el.style.cssText = `background:${cfg.bg}; border:1px solid ${cfg.border}; color:#f1f5f9; backdrop-filter:blur(12px);`;
+        el.innerHTML = `
+            <div class="toast-dot" style="background:${cfg.dot}"></div>
+            <div>
+                <div>${msg}</div>
+                ${metaHtml}
+            </div>`;
+        container.appendChild(el);
+
+        setTimeout(() => {
+            el.classList.add('out');
+            setTimeout(() => el.remove(), 350);
+        }, durationMs);
+    }
+
+    // ---- API helper ----
+    async function api(path, method = 'GET', body = null) {
+        const t0 = performance.now();
+        const opts = { method, headers: { 'Content-Type': 'application/json' } };
+        if (body) opts.body = JSON.stringify(body);
+        const res = await fetch(path, opts);
+        const elapsed = Math.round(performance.now() - t0);
+        const data = await res.json();
+        if (!res.ok) {
+            const err = new Error(data.error || 'Server error');
+            err.elapsed = elapsed;
+            throw err;
+        }
+        data._elapsed = elapsed;
+        return data;
+    }
+
+    // ---- Email modal (kirim pesan ke mahasiswa via Gmail) ----
+    let emailTarget = null;
+
+    function openEmailModalFor(mhs) {
+        if (!mhs) return;
+        emailTarget = mhs;
+        document.getElementById('email-to-name').textContent = mhs.nama;
+        document.getElementById('email-to-addr').textContent  = mhs.email || '(tidak ada email)';
+        document.getElementById('email-subject').value = `Informasi Akademik — ${mhs.nama}`;
+        document.getElementById('email-body').value =
+            `Halo ${mhs.nama},\n\nBerikut informasi akademik Anda saat ini:\nNIM: ${mhs.nim}\nProgram Studi: ${mhs.prodi}\nIPK: ${(mhs.ipk || 0).toFixed(2)}\n\nTerima kasih.`;
+        document.getElementById('email-modal').classList.add('show');
+    }
+
+    async function openEmailModalForNim(nim) {
+        try {
+            const mhs = await api(`/api/mahasiswa/${nim}`);
+            openEmailModalFor(mhs);
+        } catch (e) {
+            toast(e.message, 'error', e.elapsed);
+        }
+    }
+
+    function closeEmailModal() {
+        document.getElementById('email-modal').classList.remove('show');
+    }
+
+    // ---- Import Excel modal ----
+    let importMode = 'skip';
+
+    function openImportModal() {
+        document.getElementById('import-file').value = '';
+        document.getElementById('import-form-area').classList.remove('hidden');
+        document.getElementById('import-result-area').classList.add('hidden');
+        document.getElementById('import-result-area').innerHTML = '';
+        document.getElementById('btn-do-import').textContent = 'Mulai Import';
+        document.getElementById('btn-do-import').disabled = false;
+        setImportMode('skip');
+        document.getElementById('import-modal').classList.add('show');
+    }
+
+    function closeImportModal() {
+        document.getElementById('import-modal').classList.remove('show');
+    }
+
+    function setImportMode(mode) {
+        importMode = mode;
+        document.getElementById('mode-skip').classList.toggle('active', mode === 'skip');
+        document.getElementById('mode-update').classList.toggle('active', mode === 'update');
+    }
+
+    async function doImportExcel() {
+        const fileInput = document.getElementById('import-file');
+        const file = fileInput.files[0];
+        if (!file) { toast('Pilih file Excel (.xlsx) terlebih dahulu.', 'warn'); return; }
+
+        const btn = document.getElementById('btn-do-import');
+        btn.disabled = true;
+        btn.textContent = 'Mengimpor...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('mode', importMode);
+
+        const t0 = performance.now();
+        try {
+            const res = await fetch('/api/import/excel', { method: 'POST', body: formData });
+            const data = await res.json();
+            const ms = Math.round(performance.now() - t0);
+            if (!res.ok) throw new Error(data.error || 'Import gagal.');
+
+            const resultArea = document.getElementById('import-result-area');
+            resultArea.classList.remove('hidden');
+            let html = `
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="glass rounded-xl p-2"><p class="text-teal-400 font-extrabold text-lg mono">${data.added}</p><p class="text-[10px] text-stone-500">Ditambah</p></div>
+                    <div class="glass rounded-xl p-2"><p class="text-cyan-400 font-extrabold text-lg mono">${data.updated}</p><p class="text-[10px] text-stone-500">Ditimpa</p></div>
+                    <div class="glass rounded-xl p-2"><p class="text-amber-400 font-extrabold text-lg mono">${data.skipped}</p><p class="text-[10px] text-stone-500">Dilewati</p></div>
+                </div>`;
+            if (data.errors && data.errors.length > 0) {
+                html += `<div class="mt-3 max-h-32 overflow-y-auto rounded-xl p-2" style="background:rgba(0,0,0,0.3)">
+                    <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">${data.errors.length} baris bermasalah</p>
+                    ${data.errors.map(er => `<div class="import-error-row">Baris ${er.row}${er.nim ? ' (NIM ' + er.nim + ')' : ''}: ${er.reason}</div>`).join('')}
+                </div>`;
+            }
+            resultArea.innerHTML = html;
+            document.getElementById('import-form-area').classList.add('hidden');
+            btn.textContent = 'Selesai';
+
+            toast(`Import selesai: ${data.added} ditambah, ${data.updated} ditimpa, ${data.skipped} dilewati`, 'success', ms);
+            await loadTable();
+        } catch (e) {
+            toast(e.message, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Mulai Import';
+        }
+    }
+
+    async function sendEmailToMahasiswa() {
+        if (!emailTarget) return;
+        if (!emailTarget.email) { toast('Mahasiswa ini tidak memiliki alamat email.', 'warn'); return; }
+
+        const subject = document.getElementById('email-subject').value.trim();
+        const message = document.getElementById('email-body').value.trim();
+        if (!message) { toast('Pesan tidak boleh kosong.', 'warn'); return; }
+
+        const btn = document.getElementById('btn-send-email');
+        btn.disabled = true;
+        btn.textContent = 'Mengirim...';
+        const t0 = performance.now();
+        try {
+            await api(`/api/mahasiswa/${emailTarget.nim}/email`, 'POST', { subject, message });
+            const ms = Math.round(performance.now() - t0);
+            toast(`Email terkirim ke ${emailTarget.email}`, 'success', ms);
+            closeEmailModal();
+        } catch (e) {
+            toast(e.message, 'error', e.elapsed);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Kirim Email';
+        }
+    }
+
+    // ---- Auth ----
+    async function doLogin() {
+        const username = document.getElementById('login-user').value.trim();
+        const password = document.getElementById('login-pass').value.trim();
+        const errEl = document.getElementById('login-err');
+        errEl.classList.add('hidden');
+        try {
+            const res = await api('/api/login', 'POST', { username, password });
+            currentUser = res.username;
+            document.getElementById('nav-user').textContent = res.username;
+            showPage('main');
+            toast(`Selamat datang, ${res.username}!`, 'success', res._elapsed);
+        } catch (e) {
+            errEl.textContent = '❌ ' + e.message;
+            errEl.classList.remove('hidden');
+            toast(e.message, 'error', e.elapsed);
+        }
+    }
+
+    async function doLogout() {
+        const res = await api('/api/logout', 'POST');
+        toast('Berhasil logout.', 'info', res._elapsed);
+        setTimeout(() => showPage('login'), 100);
+    }
+
+    // ---- IPK helper ----
+    function ipkClass(ipk) {
+        if (ipk >= 3.75) return 'ipk-excellent';
+        if (ipk >= 3.00) return 'ipk-good';
+        if (ipk >= 2.00) return 'ipk-average';
+        return 'ipk-low';
+    }
+
+    // ---- Stats ----
+    function updateStats(data) {
+        const n = data.length;
+        document.getElementById('stat-total').textContent = n;
+        const avgIpk = n ? (data.reduce((s, m) => s + (m.ipk || 0), 0) / n).toFixed(2) : '0.00';
+        document.getElementById('stat-ipk').textContent = avgIpk;
+        const prodiSet = new Set(data.map(m => m.prodi));
+        document.getElementById('stat-prodi').textContent = prodiSet.size;
+        updateComplexity(n);
+    }
+
+    // ---- Time Complexity estimator ----
+    function updateComplexity(n) {
+        document.getElementById('tc-n').textContent = n;
+        document.getElementById('tc-n-mini').textContent = n;
+        const fmt = v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(1)+'K' : v;
+        const log2n  = n > 0 ? Math.log2(n) : 0;
+        const nlogn  = Math.round(n * log2n);
+        const nlog2n = Math.round(n * log2n * log2n);
+        document.getElementById('tc-merge').textContent  = n > 0 ? '~' + fmt(nlogn)  + ' ops' : '0 ops';
+        document.getElementById('tc-shell').textContent  = n > 0 ? '~' + fmt(nlog2n) + ' ops' : '0 ops';
+        document.getElementById('tc-search').textContent = n > 0 ? '~' + fmt(n)      + ' ops' : '0 ops';
+        document.getElementById('tc-crud').textContent   = n > 0 ? '~' + fmt(n)      + ' ops' : '0 ops';
+    }
+
+    // ---- Table ----
+    async function loadTable(data = null) {
+        const tbody = document.getElementById('table-body');
+        if (!data) {
+            try { data = await api('/api/mahasiswa'); }
+            catch { return; }
+        }
+        document.getElementById('count-badge').textContent = data.length + ' data';
+        updateStats(data);
+
+        if (data.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="px-5 py-12 text-center text-stone-600 text-sm">Data tidak ditemukan.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = data.map(m => `
+            <tr class="trow" id="row-${m.nim}">
+                <td class="px-5 py-3 mono text-amber-400 text-xs font-bold">${m.nim}</td>
+                <td class="px-5 py-3 font-semibold text-stone-200 text-sm">${m.nama}</td>
+                <td class="px-5 py-3 text-stone-400 text-xs">${m.prodi}</td>
+                <td class="px-5 py-3 text-cyan-400/80 text-xs mono">${m.email || '-'}</td>
+                <td class="px-5 py-3 text-center">
+                    <span class="mono font-bold text-sm ${ipkClass(m.ipk)}">${(m.ipk||0).toFixed(2)}</span>
+                </td>
+                <td class="px-5 py-3 text-right">
+                    <button onclick="editData('${m.nim}')" class="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 px-2.5 py-1 rounded-lg mr-1.5 transition">Edit</button>
+                    <button onclick="openEmailModalForNim('${m.nim}')" class="text-[11px] font-bold text-teal-400 hover:text-teal-300 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 px-2.5 py-1 rounded-lg mr-1.5 transition">📧 Email</button>
+                    <button onclick="deleteData('${m.nim}')" class="text-[11px] font-bold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-2.5 py-1 rounded-lg transition">Hapus</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // ---- CRUD ----
+    async function submitForm() {
+        const nim   = document.getElementById('f-nim').value.trim();
+        const nama  = document.getElementById('f-nama').value.trim();
+        const prodi = document.getElementById('f-prodi').value.trim();
+        const email = document.getElementById('f-email').value.trim();
+        const ipk   = document.getElementById('f-ipk').value.trim();
+
+        if (!nim || !nama || !prodi) { toast('NIM, Nama, dan Prodi wajib diisi.', 'error'); return; }
+
+        const t0 = performance.now();
+        try {
+            if (editingNim) {
+                await api(`/api/mahasiswa/${editingNim}`, 'PUT', { nama, prodi, email, ipk: parseFloat(ipk) || 0 });
+                const ms = Math.round(performance.now() - t0);
+                toast('Data diperbarui', 'success', ms);
+                const row = document.getElementById('row-' + editingNim);
+                if (row) { row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
+            } else {
+                await api('/api/mahasiswa', 'POST', { nim, nama, prodi, email, ipk: parseFloat(ipk) || 0 });
+                const ms = Math.round(performance.now() - t0);
+                toast('Mahasiswa baru disimpan', 'success', ms);
+            }
+            resetForm();
+            loadTable();
+        } catch (e) {
+            toast(e.message, 'error', e.elapsed);
+        }
+    }
+
+    async function deleteData(nim) {
+        if (!confirm(`Hapus mahasiswa NIM ${nim}?`)) return;
+        const t0 = performance.now();
+        try {
+            await api(`/api/mahasiswa/${nim}`, 'DELETE');
+            const ms = Math.round(performance.now() - t0);
+            toast('Data dihapus', 'info', ms);
+            loadTable();
+        } catch (e) {
+            toast(e.message, 'error', e.elapsed);
+        }
+    }
+
+    async function editData(nim) {
+        const t0 = performance.now();
+        try {
+            const mhs = await api(`/api/mahasiswa/${nim}`);
+            const ms = Math.round(performance.now() - t0);
+            document.getElementById('f-nim').value   = mhs.nim;
+            document.getElementById('f-nama').value  = mhs.nama;
+            document.getElementById('f-prodi').value = mhs.prodi;
+            document.getElementById('f-email').value = mhs.email || '';
+            document.getElementById('f-ipk').value   = mhs.ipk || '';
+            document.getElementById('f-nim').disabled = true;
+            document.getElementById('form-mode-badge').textContent = 'EDIT MODE';
+            document.getElementById('form-mode-badge').className   = 'badge bg-amber-500/10 text-amber-300 border border-amber-500/20';
+            document.getElementById('btn-submit').textContent = 'Update Data';
+            editingNim = nim;
+            toast('Data dimuat ke form', 'info', ms);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch (e) {
+            toast(e.message, 'error', e.elapsed);
+        }
+    }
+
+    function resetForm() {
+        ['f-nim','f-nama','f-prodi','f-email','f-ipk'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('f-nim').disabled = false;
+        document.getElementById('form-mode-badge').textContent = 'CREATE';
+        document.getElementById('form-mode-badge').className   = 'badge bg-rose-500/10 text-rose-300 border border-rose-500/20';
+        document.getElementById('btn-submit').textContent = 'Simpan Data';
+        editingNim = null;
+    }
+
+    // ---- Search ----
+    async function doSearch() {
+        const val = document.getElementById('search-input').value.trim();
+        if (!val) { toast('Masukkan NIM atau Nama terlebih dahulu.', 'warn'); return; }
+
+        const resultsEl = document.getElementById('search-results');
+        const isNumeric = /^[0-9]+$/.test(val);
+        const t0 = performance.now();
+
+        if (isNumeric) {
+            try {
+                const mhs = await api(`/api/mahasiswa/${val}`);
+                const ms = Math.round(performance.now() - t0);
+                // Show inline result card
+                resultsEl.classList.remove('hidden');
+                resultsEl.innerHTML = `
+                    <div class="result-card" onclick="goToDetail(${JSON.stringify(mhs).replace(/"/g, '&quot;')})">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-rose-600 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                ${mhs.nama.charAt(0)}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="font-bold text-white text-sm">${mhs.nama}</p>
+                                <p class="text-xs text-stone-500">${mhs.nim} · ${mhs.prodi}</p>
+                            </div>
+                            <span class="mono font-extrabold text-sm ${ipkClass(mhs.ipk)}">${(mhs.ipk||0).toFixed(2)}</span>
+                            <span class="text-stone-600 text-xs">→</span>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-stone-600 text-center mt-1">Klik untuk melihat detail lengkap · ${ms}ms</p>`;
+                toast('NIM ditemukan', 'success', ms);
+            } catch (e) {
+                resultsEl.classList.remove('hidden');
+                resultsEl.innerHTML = `<p class="text-xs text-red-400 text-center py-2">${e.message}</p>`;
+                toast(e.message, 'error', e.elapsed);
+            }
+        } else {
+            try {
+                const results = await api(`/api/mahasiswa/search?nama=${encodeURIComponent(val)}`);
+                const ms = Math.round(performance.now() - t0);
+                // Show inline result cards for name search
+                if (results.length === 0) {
+                    resultsEl.classList.remove('hidden');
+                    resultsEl.innerHTML = `<p class="text-xs text-stone-500 text-center py-2">Tidak ada hasil untuk "${val}"</p>`;
+                    toast('Tidak ada hasil.', 'warn', ms);
+                } else {
+                    resultsEl.classList.remove('hidden');
+                    resultsEl.innerHTML = results.slice(0,5).map(m => `
+                        <div class="result-card" onclick="goToDetail(${JSON.stringify(m).replace(/"/g, '&quot;')})">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-600 to-cyan-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                    ${m.nama.charAt(0)}
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="font-bold text-white text-sm">${m.nama}</p>
+                                    <p class="text-xs text-stone-500">${m.nim} · ${m.prodi}</p>
+                                </div>
+                                <span class="mono font-bold text-xs ${ipkClass(m.ipk)}">${(m.ipk||0).toFixed(2)}</span>
+                                <span class="text-stone-600 text-xs">→</span>
+                            </div>
+                        </div>`).join('') +
+                        (results.length > 5 ? `<p class="text-[10px] text-stone-600 text-center">+${results.length-5} lainnya</p>` : '') +
+                        `<p class="text-[10px] text-stone-600 text-center">${results.length} hasil · ${ms}ms · Klik untuk detail</p>`;
+                    loadTable(results);
+                    toast(`${results.length} hasil ditemukan`, 'success', ms);
+                }
+            } catch (e) {
+                toast(e.message, 'error', e.elapsed);
+            }
+        }
+    }
+
+    async function goToDetail(mhsData) {
+        // Fetch full detail (with display_info)
+        try {
+            const mhs = await api(`/api/mahasiswa/${mhsData.nim}`);
+            detailData = mhs;
+            const initial = mhs.nama ? mhs.nama.charAt(0).toUpperCase() : '?';
+            document.getElementById('detail-avatar').textContent = initial;
+            document.getElementById('d-nim').textContent   = mhs.nim;
+            document.getElementById('d-nama').textContent  = mhs.nama;
+            document.getElementById('d-prodi').textContent = mhs.prodi;
+            document.getElementById('d-email').textContent = mhs.email || '-';
+
+            const ipkEl = document.getElementById('d-ipk');
+            ipkEl.textContent = (mhs.ipk || 0).toFixed(2);
+            ipkEl.className = 'font-extrabold text-2xl ' + ipkClass(mhs.ipk);
+
+            document.getElementById('d-poly').textContent  = mhs.display_info;
+            document.getElementById('search-input').value  = '';
+            document.getElementById('search-results').classList.add('hidden');
+            showPage('detail');
+        } catch (e) {
+            toast(e.message, 'error', e.elapsed);
+        }
+    }
+
+    function resetFilter() {
+        document.getElementById('search-input').value = '';
+        document.getElementById('search-results').classList.add('hidden');
+        loadTable();
+    }
+
+    // ---- Sort ----
+    async function doSort() {
+        const method = document.getElementById('sort-method').value;
+        const t0 = performance.now();
+        try {
+            const res = await api(`/api/mahasiswa/sort/${method}`, 'POST');
+            const ms = Math.round(performance.now() - t0);
+            await loadTable(res.data);
+            toast(res.message, 'info', ms);
+        } catch (e) {
+            toast(e.message, 'error', e.elapsed);
+        }
+    }
+
+    // ---- Export ----
+    async function exportExcel() {
+        const t0 = performance.now();
+        try {
+            toast('Mengunduh Excel...', 'info', null, 2000);
+            const res = await fetch('/api/export/excel');
+            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            const blob = await res.blob();
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href = url; a.download = 'data_mahasiswa.xlsx'; a.click();
+            URL.revokeObjectURL(url);
+            const ms = Math.round(performance.now() - t0);
+            toast('Excel berhasil diunduh', 'success', ms);
+        } catch (e) {
+            const ms = Math.round(performance.now() - t0);
+            toast('Export gagal: ' + e.message, 'error', ms);
+        }
+    }
+
+    // ---- Detail page actions ----
+    function editFromDetail() {
+        if (!detailData) return;
+        showPage('main');
+        setTimeout(() => editData(detailData.nim), 500);
+    }
+
+    // ---- Keyboard shortcuts ----
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('login-pass').addEventListener('keydown', e => {
+            if (e.key === 'Enter') doLogin();
+        });
+        document.getElementById('search-input').addEventListener('input', e => {
+            if (!e.target.value.trim()) {
+                document.getElementById('search-results').classList.add('hidden');
+            }
+        });
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { closeEmailModal(); closeImportModal(); }
+    });
+</script>
+</body>
+</html>

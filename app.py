@@ -34,7 +34,7 @@ DATA_FILE = os.environ.get('DATA_PATH', 'mahasiswa.json')
 # ============================================================
 BREVO_API_KEY      = os.environ.get('BREVO_API_KEY', '')
 BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL', '')
-BREVO_SENDER_NAME  = os.environ.get('BREVO_SENDER_NAME', 'SiMawa — Sistem Manajemen Mahasiswa')
+BREVO_SENDER_NAME  = os.environ.get('BREVO_SENDER_NAME', 'MYCLASS — Sistem Manajemen Mahasiswa')
 
 # ============================================================
 # OOP: Class Mahasiswa (Encapsulation)
@@ -423,12 +423,12 @@ class EmailService:
         <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;
                     border:1px solid #e5e7eb;border-radius:14px;overflow:hidden">
           <div style="background:#1a472a;color:#ffffff;padding:18px 22px;
-                      font-weight:700;font-size:15px">🎓 SiMawa — Sistem Manajemen Mahasiswa</div>
+                      font-weight:700;font-size:15px">🎓 MYCLASS — Sistem Manajemen Mahasiswa</div>
           <div style="padding:22px;color:#1f2937;line-height:1.7;font-size:14px">
             {safe_message}
           </div>
           <div style="padding:14px 22px;background:#f3f4f6;color:#9ca3af;font-size:11px">
-            Email ini dikirim otomatis oleh sistem SiMawa, mohon tidak membalas pesan ini.
+            Email ini dikirim otomatis oleh sistem MyClass, mohon tidak membalas pesan ini.
           </div>
         </div>"""
 

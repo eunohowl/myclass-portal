@@ -410,7 +410,7 @@ def upload_students():
     if added == 0 and errors:
         return redirect(url_for('dashboard', toast_type='error', toast_msg=f"❌ Import gagal: {errors[0]}"))
 
-    if added > 0:
+    if added > 0 and os.getenv('MAIL_PASSWORD'):
         kirim_notifikasi(os.getenv('ADMIN_EMAIL', 'khlazieeed@gmail.com'), f'Import Massal: {added} Mahasiswa Baru',
             f'{added} data mahasiswa baru berhasil diimport ke kelas 03TPLP002. {skipped} data dilewati.')
 

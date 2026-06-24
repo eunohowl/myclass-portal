@@ -1,447 +1,660 @@
-from flask import Flask, render_template, request, redirect, url_for, session, Response
-import os, io, csv
-import pandas as pd
-from dotenv import load_dotenv
-from flask_mail import Mail, Message
+"""
+MahasiswaCRUD - Python Flask Backend
+OOP Blueprint: Encapsulation, Inheritance, Polymorphism
+"""
 
-# Load file .env biar kebaca sistem
-load_dotenv()
+import json
+import os
+import re
+import io
+from flask import Flask, request, jsonify, render_template, session, send_file
+from functools import wraps
+
+import requests
+
+# .env opsional (kalau python-dotenv terinstall & ada file .env) — kalau
+# tidak ada, baris ini cukup diabaikan dan app tetap jalan normal.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'unpam_ti_secret_key_super_gaib')
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
+app.secret_key = 'mahasiswa_secret_key_2026'
 
-# Konfigurasi Mail Server pakai .env (Default: SendGrid SMTP)
-app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.sendgrid.net')
-app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
-app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True') == 'True'
-app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'apikey')
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', '')
-app.config['MAIL_SUPPRESS_SEND'] = not bool(os.getenv('MAIL_PASSWORD'))
-mail = Mail(app)
+DATA_FILE = os.environ.get('DATA_PATH', 'mahasiswa.json')
 
-def kirim_notifikasi(to_email, subject, body):
-    try:
-        sender_email = os.getenv('MAIL_DEFAULT_SENDER', 'khlazieeed@gmail.com')
-        msg = Message(subject, sender=sender_email, recipients=[to_email])
-        msg.body = body
-        mail.send(msg)
-        print(f"✅ Email sukses terkirim ke {to_email}")
-    except Exception as e:
-        print(f"❌ Error kirim email: {e}")
-        import traceback
-        traceback.print_exc()
+# ============================================================
+# Konfigurasi Brevo (untuk fitur kirim email ke mahasiswa)
+# Set via environment variable di Railway:
+#   BREVO_API_KEY        -> API key dari dashboard Brevo
+#   BREVO_SENDER_EMAIL   -> Email pengirim yang sudah diverifikasi di Brevo
+#   BREVO_SENDER_NAME    -> (opsional) nama pengirim yang ditampilkan
+# ============================================================
+BREVO_API_KEY      = os.environ.get('BREVO_API_KEY', '')
+BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL', '')
+BREVO_SENDER_NAME  = os.environ.get('BREVO_SENDER_NAME', 'SiMawa — Sistem Manajemen Mahasiswa')
 
-# DATABASE (Sudah ditambahkan field 'email')
-users_db = {os.getenv('ADMIN_EMAIL', 'khlazieeed@gmail.com'): "admin"}
-students_db = [
-    {"name": "Zidan Achilla Muhammad Azka", "nim": "241011450306", "ipk": 3.43, "hadir": 12, "status": "Aktif", "jurusan": "Teknik Informatika", "email": "zidanachilla@gmail.com"},
-    {"name": "M. Rafli", "nim": "241011450112", "ipk": 3.20, "hadir": 14, "status": "Aktif", "jurusan": "Teknik Informatika", "email": "mrafli@gmail.com"}
-]
-jadwal_db = [
-    {"kode": "22TIF0103", "matkul": "STRUKTUR DATA", "dosen": "INES HEIDIANI IKASARI", "sks": 3, "hari": "Senin", "jam": "07.10 - 08.50", "ruang": "V.208A", "periode": 1, "tgl_mulai": "2 Mar 2026", "tgl_selesai": "4 Jul 2026"},
-    {"kode": "22TIF0093", "matkul": "STATISTIKA DAN PROBABILITAS", "dosen": "TUKIYAT", "sks": 2, "hari": "Senin", "jam": "08.50 - 10.30", "ruang": "V.208A", "periode": 1, "tgl_mulai": "2 Mar 2026", "tgl_selesai": "4 Jul 2026"},
-    {"kode": "22TIF0122", "matkul": "GRAPH TERAPAN", "dosen": "SUSANNA DWI YULIANTI KUSUMA", "sks": 3, "hari": "Selasa", "jam": "07.10 - 08.50", "ruang": "V.208A", "periode": 1, "tgl_mulai": "2 Mar 2026", "tgl_selesai": "4 Jul 2026"},
-    {"kode": "22TIF0142", "matkul": "MATEMATIKA DISKRIT", "dosen": "HERWIS GULTOM", "sks": 2, "hari": "Selasa", "jam": "08.50 - 10.30", "ruang": "V.208A", "periode": 1, "tgl_mulai": "2 Mar 2026", "tgl_selesai": "4 Jul 2026"},
-    {"kode": "22ILK0042", "matkul": "ALJABAR LINIER DAN MATRIKS", "dosen": "INDAH PERTIWI", "sks": 2, "hari": "Selasa", "jam": "10.30 - 12.10", "ruang": "V.208A", "periode": 1, "tgl_mulai": "2 Mar 2026", "tgl_selesai": "4 Jul 2026"},
-    {"kode": "22TIF0152", "matkul": "SISTEM BERKAS", "dosen": "DANI RAMDANI", "sks": 3, "hari": "Selasa", "jam": "13.00 - 14.40", "ruang": "V.208A", "periode": 1, "tgl_mulai": "2 Mar 2026", "tgl_selesai": "4 Jul 2026"},
-    {"kode": "22TIF0113", "matkul": "ALGORITMA DAN PEMROGRAMAN II", "dosen": "EKA SRI RAHAYU", "sks": 3, "hari": "Rabu", "jam": "07.10 - 08.50", "ruang": "V.208A", "periode": 1, "tgl_mulai": "2 Mar 2026", "tgl_selesai": "4 Jul 2026"},
-    {"kode": "22TIF0133", "matkul": "JARINGAN KOMPUTER", "dosen": "EKA SRI RAHAYU", "sks": 3, "hari": "Rabu", "jam": "08.50 - 10.30", "ruang": "V.208A", "periode": 1, "tgl_mulai": "2 Mar 2026", "tgl_selesai": "4 Jul 2026"}
-]
+# ============================================================
+# OOP: Class Mahasiswa (Encapsulation)
+# ============================================================
+class Mahasiswa:
+    def __init__(self, nim: str, nama: str, prodi: str, email: str = '', ipk: float = 0.0):
+        self.__nim   = nim
+        self.__nama  = nama
+        self.__prodi = prodi
+        self.__email = email
+        self.__ipk   = float(ipk)
 
-# ─── COLUMN ALIAS MAP ───
-COL_ALIASES = {
-    'name':    ['name', 'nama', 'nama lengkap', 'nama_lengkap', 'full name'],
-    'nim':     ['nim', 'nomor_induk', 'student_id', 'no induk', 'id mahasiswa'],
-    'ipk':     ['ipk', 'gpa', 'grade', 'nilai'],
-    'hadir':   ['hadir', 'kehadiran', 'attendance', 'total_hadir', 'total hadir', 'absensi'],
-    'status':  ['status', 'status mahasiswa'],
-    'jurusan': ['jurusan', 'prodi', 'major', 'program studi', 'program_studi'],
-    'email':   ['email', 'e-mail', 'mail', 'alamat email', 'alamat_email']
-}
+    # --- Getters ---
+    @property
+    def nim(self):   return self.__nim
+    @property
+    def nama(self):  return self.__nama
+    @property
+    def prodi(self): return self.__prodi
+    @property
+    def email(self): return self.__email
+    @property
+    def ipk(self):   return self.__ipk
 
-def resolve_columns(df_columns):
-    col_lower = {c.strip().lower(): c for c in df_columns}
-    mapping = {}
-    for field, aliases in COL_ALIASES.items():
-        for alias in aliases:
-            if alias in col_lower:
-                mapping[field] = col_lower[alias]
-                break
-    return mapping
+    # Validasi NIM: angka, minimal 5 digit
+    @staticmethod
+    def validate_nim(nim: str) -> bool:
+        return bool(re.fullmatch(r'[0-9]{5,}', nim))
 
-def parse_upload(file):
-    global students_db
-    filename = file.filename.lower()
-    added, skipped = 0, 0
-    errors = []
-    existing_nims = {str(m['nim']) for m in students_db}
+    @staticmethod
+    def validate_email(email: str) -> bool:
+        return bool(re.fullmatch(r'[^@]+@[^@]+\.[^@]+', email))
 
-    try:
-        if filename.endswith('.csv'):
-            content = file.stream.read().decode('utf-8-sig')
-            df = pd.read_csv(io.StringIO(content), dtype=str)
-        elif filename.endswith(('.xlsx', '.xls')):
-            file.stream.seek(0)
-            df = pd.read_excel(file.stream, dtype=str, engine='openpyxl' if filename.endswith('.xlsx') else None)
-        else:
-            return 0, 0, ['Format tidak didukung. Gunakan .csv atau .xlsx/.xls']
-    except Exception as e:
-        return 0, 0, [f'Gagal membaca file: {str(e)}']
-
-    df.columns = [str(c).strip() for c in df.columns]
-    col_map = resolve_columns(df.columns)
-
-    if 'name' not in col_map or 'nim' not in col_map:
-        return 0, 0, [f'Kolom wajib tidak ditemukan. Pastikan ada kolom: name/nama dan nim. Kolom terdeteksi: {list(df.columns)}']
-
-    for i, row in df.iterrows():
-        lineno = i + 2
+    @staticmethod
+    def validate_ipk(ipk) -> bool:
         try:
-            name = str(row[col_map['name']]).strip()
-            nim  = str(row[col_map['nim']]).strip()
+            val = float(ipk)
+            return 0.0 <= val <= 4.0
+        except (ValueError, TypeError):
+            return False
 
-            if nim.endswith('.0'):
+    # Polimorfisme: display_info
+    def display_info(self) -> str:
+        cls = self.__prodi.replace(' ', '')
+        return (f'Instance of Class {cls} -> '
+                f'"Halo saya {self.__nama}, NIM {self.__nim} '
+                f'dari Prodi {self.__prodi}, IPK {self.__ipk:.2f}."')
+
+    def to_dict(self) -> dict:
+        return {
+            'nim':   self.__nim,
+            'nama':  self.__nama,
+            'prodi': self.__prodi,
+            'email': self.__email,
+            'ipk':   round(self.__ipk, 2),
+        }
+
+
+# ============================================================
+# OOP: MahasiswaManager (File I/O + Sorting Algorithms)
+# ============================================================
+class MahasiswaManager:
+    def __init__(self, filepath: str):
+        self.filepath = filepath
+        self.data: list[Mahasiswa] = []
+        self.load_from_file()
+
+    # --- File I/O ---
+    def load_from_file(self):
+        if os.path.exists(self.filepath):
+            with open(self.filepath, 'r', encoding='utf-8') as f:
+                raw = json.load(f)
+            self.data = [
+                Mahasiswa(r['nim'], r['nama'], r['prodi'],
+                          r.get('email', ''), r.get('ipk', 0.0))
+                for r in raw
+            ]
+        else:
+            seeds = [
+                Mahasiswa('202601001', 'Budi Utomo',          'Sistem Informasi',    'budi.utomo@student.ac.id',       3.75),
+                Mahasiswa('202601002', 'Sutan Hasibuan',      'Teknik Informatika',  'sutan.hasibuan@student.ac.id',   3.90),
+                Mahasiswa('202601003', 'Citra Lestari',       'Sains Data',          'citra.lestari@student.ac.id',    3.82),
+                Mahasiswa('202601004', 'Dimas Prasetyo',      'Teknik Informatika',  'dimas.prasetyo@student.ac.id',   3.55),
+                Mahasiswa('202601005', 'Erina Kusuma',        'Sistem Informasi',    'erina.kusuma@student.ac.id',     3.68),
+                Mahasiswa('202601006', 'Fajar Ramadhan',      'Sains Data',          'fajar.ramadhan@student.ac.id',   3.40),
+                Mahasiswa('202601007', 'Gita Maharani',       'Manajemen Informatika','gita.maharani@student.ac.id',   3.77),
+                Mahasiswa('202601008', 'Hendra Wijaya',       'Teknik Informatika',  'hendra.wijaya@student.ac.id',    3.22),
+                Mahasiswa('202601009', 'Indah Permatasari',   'Sistem Informasi',    'indah.permatasari@student.ac.id',3.88),
+                Mahasiswa('202601010', 'Joko Santoso',        'Sains Data',          'joko.santoso@student.ac.id',     3.15),
+                Mahasiswa('202601011', 'Kartika Dewi',        'Teknik Informatika',  'kartika.dewi@student.ac.id',     3.93),
+                Mahasiswa('202601012', 'Lukman Hakim',        'Manajemen Informatika','lukman.hakim@student.ac.id',    3.47),
+                Mahasiswa('202601013', 'Maya Putri',          'Sistem Informasi',    'maya.putri@student.ac.id',       3.61),
+                Mahasiswa('202601014', 'Naufal Rizky',        'Teknik Informatika',  'naufal.rizky@student.ac.id',     3.84),
+                Mahasiswa('202601015', 'Olivia Santika',      'Sains Data',          'olivia.santika@student.ac.id',   3.29),
+                Mahasiswa('202601016', 'Panji Nugroho',       'Teknik Informatika',  'panji.nugroho@student.ac.id',    3.72),
+                Mahasiswa('202601017', 'Qisthi Aulia',        'Manajemen Informatika','qisthi.aulia@student.ac.id',    3.56),
+                Mahasiswa('202601018', 'Rizky Pratama',       'Sistem Informasi',    'rizky.pratama@student.ac.id',    3.44),
+                Mahasiswa('202601019', 'Sari Indah Wulandari','Sains Data',          'sari.wulandari@student.ac.id',   3.91),
+                Mahasiswa('202601020', 'Taufiq Hidayat',      'Teknik Informatika',  'taufiq.hidayat@student.ac.id',   3.67),
+            ]
+            self.data = seeds
+            self.save_to_file()
+
+    def save_to_file(self):
+        with open(self.filepath, 'w', encoding='utf-8') as f:
+            json.dump([m.to_dict() for m in self.data], f, indent=2, ensure_ascii=False)
+
+    # --- CRUD ---
+    def get_all(self) -> list[dict]:
+        return [m.to_dict() for m in self.data]
+
+    def find_by_nim(self, nim: str) -> Mahasiswa | None:
+        return next((m for m in self.data if m.nim == nim), None)
+
+    def search_by_nama(self, keyword: str) -> list[dict]:
+        kw = keyword.lower()
+        return [m.to_dict() for m in self.data if kw in m.nama.lower()]
+
+    def add(self, nim: str, nama: str, prodi: str, email: str, ipk: float) -> dict:
+        if not Mahasiswa.validate_nim(nim):
+            raise ValueError('Format NIM tidak valid! Harus angka minimal 5 digit.')
+        if self.find_by_nim(nim):
+            raise ValueError(f'NIM {nim} sudah terdaftar.')
+        if email and not Mahasiswa.validate_email(email):
+            raise ValueError('Format email tidak valid.')
+        if not Mahasiswa.validate_ipk(ipk):
+            raise ValueError('IPK harus antara 0.00 dan 4.00.')
+        mhs = Mahasiswa(nim, nama, prodi, email, ipk)
+        self.data.append(mhs)
+        self.save_to_file()
+        return mhs.to_dict()
+
+    def update(self, nim: str, nama: str, prodi: str, email: str, ipk: float) -> dict:
+        mhs = self.find_by_nim(nim)
+        if not mhs:
+            raise ValueError(f'Mahasiswa NIM {nim} tidak ditemukan.')
+        if email and not Mahasiswa.validate_email(email):
+            raise ValueError('Format email tidak valid.')
+        if not Mahasiswa.validate_ipk(ipk):
+            raise ValueError('IPK harus antara 0.00 dan 4.00.')
+        self.data = [m for m in self.data if m.nim != nim]
+        updated = Mahasiswa(nim, nama, prodi, email, ipk)
+        self.data.append(updated)
+        self.save_to_file()
+        return updated.to_dict()
+
+    def delete(self, nim: str) -> bool:
+        before = len(self.data)
+        self.data = [m for m in self.data if m.nim != nim]
+        if len(self.data) == before:
+            raise ValueError(f'Mahasiswa NIM {nim} tidak ditemukan.')
+        self.save_to_file()
+        return True
+
+    # --- Sorting Algorithms ---
+    def merge_sort_by_nim(self):
+        """Merge Sort — O(n log n) — by NIM"""
+        self.data = self._merge_sort(self.data, key=lambda m: m.nim)
+        self.save_to_file()
+
+    def shell_sort_by_nama(self):
+        """Shell Sort — by Nama"""
+        arr = self.data[:]
+        n = len(arr)
+        gap = n // 2
+        while gap > 0:
+            for i in range(gap, n):
+                temp = arr[i]
+                j = i
+                while j >= gap and arr[j - gap].nama.lower() > temp.nama.lower():
+                    arr[j] = arr[j - gap]
+                    j -= gap
+                arr[j] = temp
+            gap //= 2
+        self.data = arr
+        self.save_to_file()
+
+    def _merge_sort(self, arr, key):
+        if len(arr) <= 1:
+            return arr
+        mid = len(arr) // 2
+        left  = self._merge_sort(arr[:mid], key)
+        right = self._merge_sort(arr[mid:], key)
+        return self._merge(left, right, key)
+
+    def _merge(self, left, right, key):
+        result = []
+        i = j = 0
+        while i < len(left) and j < len(right):
+            if key(left[i]) <= key(right[j]):
+                result.append(left[i]); i += 1
+            else:
+                result.append(right[j]); j += 1
+        result.extend(left[i:])
+        result.extend(right[j:])
+        return result
+
+    # --- Export ---
+    def export_to_excel_bytes(self) -> bytes:
+        """Export data to Excel (.xlsx) using openpyxl"""
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.utils import get_column_letter
+        except ImportError:
+            raise ImportError('openpyxl not installed. Run: pip install openpyxl')
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Data Mahasiswa'
+
+        # Header style
+        header_font  = Font(bold=True, color='FFFFFF', size=11)
+        header_fill  = PatternFill(start_color='1a472a', end_color='1a472a', fill_type='solid')
+        center_align = Alignment(horizontal='center', vertical='center')
+        thin_border  = Border(
+            left   = Side(style='thin', color='D0D0D0'),
+            right  = Side(style='thin', color='D0D0D0'),
+            top    = Side(style='thin', color='D0D0D0'),
+            bottom = Side(style='thin', color='D0D0D0'),
+        )
+
+        headers = ['No', 'NIM', 'Nama', 'Program Studi', 'Email', 'IPK']
+        col_widths = [5, 14, 28, 26, 34, 8]
+
+        for col_idx, (h, w) in enumerate(zip(headers, col_widths), start=1):
+            cell = ws.cell(row=1, column=col_idx, value=h)
+            cell.font      = header_font
+            cell.fill      = header_fill
+            cell.alignment = center_align
+            cell.border    = thin_border
+            ws.column_dimensions[get_column_letter(col_idx)].width = w
+
+        ws.row_dimensions[1].height = 22
+
+        # Data rows
+        alt_fill = PatternFill(start_color='F0FFF4', end_color='F0FFF4', fill_type='solid')
+        for row_idx, m in enumerate(self.data, start=2):
+            row_data = [row_idx - 1, m.nim, m.nama, m.prodi, m.email, m.ipk]
+            fill = alt_fill if row_idx % 2 == 0 else None
+            for col_idx, val in enumerate(row_data, start=1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                cell.border    = thin_border
+                cell.alignment = center_align if col_idx in (1, 2, 6) else Alignment(vertical='center')
+                if fill:
+                    cell.fill = fill
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.read()
+
+    # --- Import ---
+    def import_from_excel_bytes(self, file_bytes: bytes, mode: str = 'skip') -> dict:
+        """Import data mahasiswa dari file Excel (.xlsx) menggunakan openpyxl.
+
+        Header kolom yang dikenali (urutan bebas, tidak peka huruf besar/kecil):
+            NIM, Nama, Program Studi (atau Prodi), Email (opsional), IPK (opsional)
+
+        mode:
+            'skip'   -> baris dengan NIM yang sudah terdaftar akan dilewati
+            'update' -> baris dengan NIM yang sudah terdaftar akan menimpa data lama
+
+        Return dict ringkasan hasil import (added, updated, skipped, errors, total_rows).
+        """
+        try:
+            from openpyxl import load_workbook
+        except ImportError:
+            raise ImportError('openpyxl not installed. Run: pip install openpyxl')
+
+        try:
+            wb = load_workbook(io.BytesIO(file_bytes), data_only=True)
+        except Exception as e:
+            raise ValueError(f'File Excel tidak valid atau rusak: {e}')
+
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            raise ValueError('File Excel kosong, tidak ada data untuk diimpor.')
+
+        header_row = [str(c).strip().lower() if c is not None else '' for c in rows[0]]
+
+        def find_col(*names):
+            for i, h in enumerate(header_row):
+                if h in names:
+                    return i
+            return None
+
+        col_nim   = find_col('nim')
+        col_nama  = find_col('nama')
+        col_prodi = find_col('program studi', 'prodi')
+        col_email = find_col('email')
+        col_ipk   = find_col('ipk')
+
+        if col_nim is None or col_nama is None or col_prodi is None:
+            raise ValueError(
+                'Header kolom tidak dikenali. Pastikan baris pertama berisi '
+                'header: NIM, Nama, Program Studi (Email & IPK opsional).'
+            )
+
+        def cell(row, col):
+            if col is None or col >= len(row):
+                return None
+            return row[col]
+
+        added, updated, skipped = 0, 0, 0
+        errors = []
+        total_rows = 0
+
+        for excel_row_no, row in enumerate(rows[1:], start=2):
+            if row is None or all(c is None for c in row):
+                continue  # baris kosong, lewati tanpa dihitung error
+            total_rows += 1
+
+            raw_nim = cell(row, col_nim)
+            nim = str(raw_nim).strip() if raw_nim is not None else ''
+            if nim.endswith('.0'):  # antisipasi NIM yang terbaca sebagai float oleh Excel
                 nim = nim[:-2]
 
-            if not name or name.lower() in ('nan', '') or not nim or nim.lower() in ('nan', ''):
-                skipped += 1
-                errors.append(f'Baris {lineno}: Nama/NIM kosong, dilewati.')
+            raw_nama = cell(row, col_nama)
+            nama = str(raw_nama).strip() if raw_nama is not None else ''
+
+            raw_prodi = cell(row, col_prodi)
+            prodi = str(raw_prodi).strip() if raw_prodi is not None else ''
+
+            raw_email = cell(row, col_email)
+            email = str(raw_email).strip() if raw_email is not None else ''
+
+            raw_ipk = cell(row, col_ipk)
+            ipk = raw_ipk if raw_ipk is not None else 0.0
+
+            if not nim or not nama or not prodi:
+                errors.append({'row': excel_row_no, 'reason': 'NIM, Nama, atau Program Studi kosong.'})
+                continue
+            if not Mahasiswa.validate_nim(nim):
+                errors.append({'row': excel_row_no, 'nim': nim, 'reason': 'Format NIM tidak valid (harus angka minimal 5 digit).'})
+                continue
+            if email and not Mahasiswa.validate_email(email):
+                errors.append({'row': excel_row_no, 'nim': nim, 'reason': 'Format email tidak valid.'})
+                continue
+            if not Mahasiswa.validate_ipk(ipk):
+                errors.append({'row': excel_row_no, 'nim': nim, 'reason': 'IPK harus antara 0.00 dan 4.00.'})
                 continue
 
-            if nim in existing_nims:
-                skipped += 1
-                errors.append(f'Baris {lineno}: NIM {nim} sudah ada, dilewati.')
+            existing = self.find_by_nim(nim)
+            if existing:
+                if mode == 'update':
+                    self.data = [m for m in self.data if m.nim != nim]
+                    self.data.append(Mahasiswa(nim, nama, prodi, email, ipk))
+                    updated += 1
+                else:
+                    skipped += 1
                 continue
 
-            # IPK
-            try:
-                ipk_raw = str(row[col_map['ipk']]).replace(',', '.').strip() if 'ipk' in col_map else '0'
-                ipk = float(ipk_raw) if ipk_raw.lower() not in ('nan', '', 'none') else 0.0
-                ipk = max(0.0, min(4.0, round(ipk, 2)))
-            except:
-                ipk = 0.0
-
-            # Kehadiran
-            try:
-                hadir_raw = str(row[col_map['hadir']]).strip() if 'hadir' in col_map else '0'
-                hadir = int(float(hadir_raw)) if hadir_raw.lower() not in ('nan', '', 'none') else 0
-                hadir = max(0, min(14, hadir))
-            except:
-                hadir = 0
-
-            # Status
-            status_raw = str(row[col_map['status']]).strip() if 'status' in col_map else ''
-            status = status_raw if status_raw.lower() not in ('nan', '', 'none') else 'Aktif'
-
-            # Jurusan
-            jurusan_raw = str(row[col_map['jurusan']]).strip() if 'jurusan' in col_map else ''
-            jurusan = jurusan_raw if jurusan_raw.lower() not in ('nan', '', 'none') else 'Teknik Informatika'
-
-            # Email parsing
-            email_raw = str(row[col_map['email']]).strip() if 'email' in col_map else ''
-            email = email_raw if email_raw.lower() not in ('nan', '', 'none') else f"{nim}@student.unpam.ac.id"
-
-            students_db.append({
-                'name': name, 'nim': nim, 'ipk': ipk,
-                'hadir': hadir, 'status': status, 'jurusan': jurusan, 'email': email
-            })
-            existing_nims.add(nim)
+            self.data.append(Mahasiswa(nim, nama, prodi, email, ipk))
             added += 1
 
-        except Exception as e:
-            skipped += 1
-            errors.append(f'Baris {lineno}: Error — {str(e)}')
+        if added or updated:
+            self.save_to_file()
 
-    return added, skipped, errors
-
-
-# ═══════════════════════════════════════════════
-#  ALGORITMA SEARCH
-# ═══════════════════════════════════════════════
-
-def linear_search(query):
-    result = []
-    for mhs in students_db:
-        if query.lower() in mhs['name'].lower():
-            result.append(mhs)
-    return result
-
-def binary_search(target_nim):
-    sorted_mhs = sorted(students_db, key=lambda x: str(x['nim']))
-    low, high = 0, len(sorted_mhs) - 1
-    while low <= high:
-        mid = (low + high) // 2
-        mid_nim = str(sorted_mhs[mid]['nim'])
-        if mid_nim == target_nim:
-            return [sorted_mhs[mid]]
-        elif mid_nim < target_nim:
-            low = mid + 1
-        else:
-            high = mid - 1
-    return []
-
-def sequential_search(target_status):
-    result = []
-    for mhs in students_db:
-        if mhs['status'].lower() == target_status.lower():
-            result.append(mhs)
-    return result
+        return {
+            'added': added,
+            'updated': updated,
+            'skipped': skipped,
+            'errors': errors,
+            'total_rows': total_rows,
+        }
 
 
-# ═══════════════════════════════════════════════
-#  ALGORITMA SORT
-# ═══════════════════════════════════════════════
+# ============================================================
+# EmailService — Kirim notifikasi/pesan ke mahasiswa via Brevo API
+# ============================================================
+class EmailService:
+    """Abstraction layer untuk pengiriman email menggunakan Brevo HTTP API."""
 
-def bubble_sort_ipk(data):
-    arr = [dict(m) for m in data]
-    n = len(arr)
-    for i in range(n):
-        swapped = False
-        for j in range(0, n - i - 1):
-            if arr[j]['ipk'] < arr[j + 1]['ipk']:
-                arr[j], arr[j + 1] = arr[j + 1], arr[j]
-                swapped = True
-        if not swapped:
-            break
-    return arr
+    BREVO_URL = 'https://api.brevo.com/v3/smtp/email'
 
-def insertion_sort_hadir(data):
-    arr = [dict(m) for m in data]
-    for i in range(1, len(arr)):
-        key = arr[i]
-        j = i - 1
-        while j >= 0 and arr[j]['hadir'] < key['hadir']:
-            arr[j + 1] = arr[j]
-            j -= 1
-        arr[j + 1] = key
-    return arr
+    @staticmethod
+    def is_configured() -> bool:
+        return bool(BREVO_API_KEY and BREVO_SENDER_EMAIL)
+
+    @staticmethod
+    def build_html(nama: str, message: str) -> str:
+        safe_message = message.replace('\n', '<br>')
+        return f"""
+        <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;
+                    border:1px solid #e5e7eb;border-radius:14px;overflow:hidden">
+          <div style="background:#1a472a;color:#ffffff;padding:18px 22px;
+                      font-weight:700;font-size:15px">🎓 SiMawa — Sistem Manajemen Mahasiswa</div>
+          <div style="padding:22px;color:#1f2937;line-height:1.7;font-size:14px">
+            {safe_message}
+          </div>
+          <div style="padding:14px 22px;background:#f3f4f6;color:#9ca3af;font-size:11px">
+            Email ini dikirim otomatis oleh sistem SiMawa, mohon tidak membalas pesan ini.
+          </div>
+        </div>"""
+
+    @classmethod
+    def send(cls, to_email: str, subject: str, message: str, nama: str = '') -> None:
+        if not cls.is_configured():
+            raise RuntimeError(
+                'Pengiriman email belum dikonfigurasi. Set environment variable '
+                'BREVO_API_KEY dan BREVO_SENDER_EMAIL di Railway.'
+            )
+        if not Mahasiswa.validate_email(to_email):
+            raise ValueError('Alamat email mahasiswa tidak valid.')
+
+        html_body = cls.build_html(nama or to_email, message)
+
+        payload = {
+            'sender': {'name': BREVO_SENDER_NAME, 'email': BREVO_SENDER_EMAIL},
+            'to': [{'email': to_email, 'name': nama or to_email}],
+            'subject': subject,
+            'htmlContent': html_body,
+            'textContent': message,
+        }
+        headers = {
+            'accept': 'application/json',
+            'api-key': BREVO_API_KEY,
+            'content-type': 'application/json',
+        }
+
+        try:
+            resp = requests.post(cls.BREVO_URL, json=payload, headers=headers, timeout=10)
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(
+                    f'Brevo error {resp.status_code}: {resp.text}'
+                )
+        except requests.exceptions.Timeout:
+            raise RuntimeError('Koneksi ke Brevo timeout. Coba lagi beberapa saat.')
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f'Gagal menghubungi Brevo API: {e}')
 
 
-# ═══════════════════════════════════════════════
-#  ROUTES
-# ═══════════════════════════════════════════════
+# ============================================================
+# Singleton Manager Instance
+# ============================================================
+manager = MahasiswaManager(DATA_FILE)
 
-@app.route('/', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-        if email in users_db and users_db[email] == password:
-            session['logged_in'] = True
-            return redirect(url_for('dashboard'))
-        return render_template('login.html', error="Email/Password salah!")
-    return render_template('login.html')
+# ============================================================
+# Auth Decorator
+# ============================================================
+USERS = {'admin': 'adminsalah123'}
 
-@app.route('/signup', methods=['GET', 'POST'])
-def signup():
-    if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-        if email not in users_db:
-            users_db[email] = password
-            return render_template('login.html', success="Akun berhasil dibuat!")
-        return render_template('signup.html', error="Email sudah terdaftar!")
-    return render_template('signup.html')
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('logged_in'):
+            return jsonify({'error': 'Unauthorized'}), 401
+        return f(*args, **kwargs)
+    return decorated
 
-@app.route('/dashboard')
-def dashboard():
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    return render_template('dashboard.html', students=students_db)
+# ============================================================
+# Routes — Auth
+# ============================================================
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-@app.route('/presensi')
-def presensi():
-    return render_template('presensi.html', students=students_db)
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    body = request.get_json()
+    username = body.get('username', '')
+    password = body.get('password', '')
+    if USERS.get(username) == password:
+        session['logged_in'] = True
+        session['username']  = username
+        return jsonify({'success': True, 'username': username})
+    return jsonify({'success': False, 'error': 'Username atau password salah.'}), 401
 
-@app.route('/data_kelas', methods=['GET'])
-def data_kelas():
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    search_type  = request.args.get('search_type', 'linear')
-    query        = request.args.get('search_query', '').strip()
-    sort_type    = request.args.get('sort_type', '')
-    toast_type   = request.args.get('toast_type', '')
-    toast_msg_p  = request.args.get('toast_msg', '')
-    data = list(students_db)
-    algo_log = ""
+@app.route('/api/logout', methods=['POST'])
+def api_logout():
+    session.clear()
+    return jsonify({'success': True})
 
-    # ── SEARCH ──
-    if query:
-        if search_type == 'linear':
-            data = linear_search(query)
-            algo_log = f"🔍 Linear Search selesai — memeriksa {len(students_db)} data satu per satu. Ditemukan {len(data)} hasil untuk nama '{query}'."
-        elif search_type == 'binary':
-            data = binary_search(query)
-            algo_log = f"🔎 Binary Search selesai — NIM diurutkan lalu dibagi dua secara rekursif. {'Ditemukan 1 data' if data else 'Tidak ditemukan'} untuk NIM '{query}'."
-        elif search_type == 'sequential':
-            data = sequential_search(query)
-            algo_log = f"📋 Sequential Search selesai — menelusuri seluruh data dari indeks 0 hingga {len(students_db)-1}. Ditemukan {len(data)} mahasiswa berstatus '{query}'."
+# ============================================================
+# Routes — CRUD
+# ============================================================
+@app.route('/api/mahasiswa', methods=['GET'])
+@login_required
+def get_all():
+    return jsonify(manager.get_all())
 
-    # ── SORT ──
-    if sort_type == 'bubble_ipk':
-        data = bubble_sort_ipk(data)
-        algo_log += f"  |  🫧 Bubble Sort — {len(data)} elemen diurutkan berdasarkan IPK tertinggi."
-    elif sort_type == 'insertion_hadir':
-        data = insertion_sort_hadir(data)
-        algo_log += f"  |  📥 Insertion Sort — {len(data)} elemen diurutkan berdasarkan kehadiran terbanyak."
+@app.route('/api/mahasiswa/search', methods=['GET'])
+@login_required
+def search():
+    keyword = request.args.get('nama', '')
+    results = manager.search_by_nama(keyword)
+    return jsonify(results)
 
-    return render_template('data_kelas.html',
-        students=data,
-        algo_log=algo_log,
-        search_type=search_type,
-        search_query=query,
-        sort_type=sort_type,
-        toast_type=toast_type,
-        toast_msg_param=toast_msg_p
-    )
-
-@app.route('/jadwal')
-def jadwal():
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    total_sks = sum(item['sks'] for item in jadwal_db)
-    info_kelas = {
-        "kelas": "03TPLP002",
-        "fakultas": "Ilmu Komputer / Teknik Informatika S1",
-        "shift": "Reguler A",
-        "semester": "Genap 2025/2026"
-    }
-    return render_template('jadwal.html', jadwal=jadwal_db, total_sks=total_sks, info_kelas=info_kelas)
-
-@app.route('/add_student', methods=['POST'])
-def add_student():
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    global students_db
-    new_mhs = {
-        "name":    request.form.get('name'),
-        "nim":     request.form.get('nim'),
-        "ipk":     float(request.form.get('ipk', 0)),
-        "hadir":   int(request.form.get('hadir', 0)),
-        "status":  request.form.get('status', 'Aktif'),
-        "email":   request.form.get('email', f"{request.form.get('nim')}@student.unpam.ac.id"),
-        "jurusan": "Teknik Informatika"
-    }
-    students_db.append(new_mhs)
-    # FIX: hanya kirim notifikasi jika email dikonfigurasi
-    if os.getenv('MAIL_PASSWORD'):
-        kirim_notifikasi(os.getenv('ADMIN_EMAIL', 'khlazieeed@gmail.com'), 'Update Database Portal', 'Data mahasiswa baru berhasil ditambahkan ke kelas 03TPLP002.')
-    return redirect(url_for('dashboard', toast_type='success', toast_msg=f"✅ {new_mhs['name']} berhasil ditambahkan!"))
-
-@app.route('/delete_student/<nim>')
-def delete_student(nim):
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    global students_db
-    students_db = [mhs for mhs in students_db if str(mhs['nim']) != str(nim)]
-    return redirect(url_for('data_kelas', toast_type='success', toast_msg="✅ Data berhasil dihapus!"))
-
-@app.route('/reset_students', methods=['POST'])
-def reset_students():
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    global students_db
-    students_db = []
-    return redirect(url_for('data_kelas', toast_type='warning', toast_msg='🗑️ Seluruh data mahasiswa telah dihapus!'))
-
-@app.route('/edit_student/<nim>', methods=['GET', 'POST'])
-def edit_student(nim):
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    global students_db
-    mhs = next((m for m in students_db if str(m['nim']) == str(nim)), None)
+@app.route('/api/mahasiswa/<nim>', methods=['GET'])
+@login_required
+def get_one(nim):
+    mhs = manager.find_by_nim(nim)
     if not mhs:
-        return redirect(url_for('data_kelas', toast_type='error', toast_msg='❌ Data tidak ditemukan.'))
-    if request.method == 'POST':
-        mhs['name']    = request.form.get('name', mhs['name'])
-        mhs['nim']     = request.form.get('nim', mhs['nim'])
-        mhs['ipk']     = float(request.form.get('ipk', mhs['ipk']))
-        mhs['hadir']   = int(request.form.get('hadir', mhs['hadir']))
-        mhs['status']  = request.form.get('status', mhs['status'])
-        mhs['email']   = request.form.get('email', mhs.get('email', ''))
-        mhs['jurusan'] = request.form.get('jurusan', mhs['jurusan'])
-        return redirect(url_for('data_kelas', toast_type='success', toast_msg=f"✅ Data {mhs['name']} berhasil diperbarui!"))
-    return render_template('edit_student.html', mhs=mhs)
+        return jsonify({'error': f'NIM {nim} tidak ditemukan.'}), 404
+    data = mhs.to_dict()
+    data['display_info'] = mhs.display_info()
+    return jsonify(data)
 
-@app.route('/profile/<nim>')
-def profile(nim):
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    mhs = next((m for m in students_db if str(m['nim']) == str(nim)), None)
-    if not mhs:
-        return redirect(url_for('data_kelas', toast_type='error', toast_msg='❌ Data tidak ditemukan.'))
-    return render_template('profile.html', mhs=mhs)
+@app.route('/api/mahasiswa', methods=['POST'])
+@login_required
+def create():
+    body = request.get_json()
+    try:
+        data = manager.add(
+            body['nim'], body['nama'], body['prodi'],
+            body.get('email', ''), body.get('ipk', 0.0)
+        )
+        return jsonify(data), 201
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
-# ── FEATURE: KIRIM EMAIL KE MAHASISWA PERSONAL ──
-@app.route('/send_email_student/<nim>', methods=['POST'])
-def send_email_student(nim):
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    global students_db
-    mhs = next((m for m in students_db if str(m['nim']) == str(nim)), None)
+@app.route('/api/mahasiswa/<nim>', methods=['PUT'])
+@login_required
+def update(nim):
+    body = request.get_json()
+    try:
+        data = manager.update(
+            nim, body['nama'], body['prodi'],
+            body.get('email', ''), body.get('ipk', 0.0)
+        )
+        return jsonify(data)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
-    if not mhs:
-        return redirect(url_for('data_kelas', toast_type='error', toast_msg='❌ Mahasiswa tidak ditemukan!'))
+@app.route('/api/mahasiswa/<nim>', methods=['DELETE'])
+@login_required
+def delete(nim):
+    try:
+        manager.delete(nim)
+        return jsonify({'success': True})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
 
-    target_email = mhs.get('email')
-    if not target_email or "@" not in target_email:
-        return redirect(url_for('data_kelas', toast_type='error', toast_msg=f'❌ Alamat email {mhs["name"]} tidak valid!'))
+@app.route('/api/mahasiswa/sort/<method>', methods=['POST'])
+@login_required
+def sort_data(method):
+    if method == 'merge':
+        manager.merge_sort_by_nim()
+        return jsonify({'message': 'Diurutkan berdasarkan NIM (Merge Sort)', 'data': manager.get_all()})
+    elif method == 'shell':
+        manager.shell_sort_by_nama()
+        return jsonify({'message': 'Diurutkan berdasarkan Nama (Shell Sort)', 'data': manager.get_all()})
+    return jsonify({'error': 'Metode tidak dikenal.'}), 400
 
-    # FIX: cek dulu apakah MAIL_PASSWORD sudah diset di server
-    if not os.getenv('MAIL_PASSWORD'):
-        return redirect(url_for('data_kelas', toast_type='error', toast_msg='❌ Fitur email belum dikonfigurasi di server!'))
+@app.route('/api/export/excel', methods=['GET'])
+@login_required
+def export_excel():
+    try:
+        excel_bytes = manager.export_to_excel_bytes()
+        return send_file(
+            io.BytesIO(excel_bytes),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='data_mahasiswa.xlsx'
+        )
+    except ImportError as e:
+        return jsonify({'error': str(e)}), 500
 
-    subject = f"Data Profil Mahasiswa - {mhs['name']}"
-    body = f"Halo, Mahasiswa/i {mhs['name']},\n\n" \
-           f"Berikut adalah data anda:\n" \
-           f"Nama      : {mhs['name']}\n" \
-           f"NIM       : {mhs['nim']}\n" \
-           f"IPK       : {mhs['ipk']}\n" \
-           f"Kehadiran : {mhs['hadir']} / 14 Pertemuan\n" \
-           f"Status    : {mhs['status']}\n" \
-           f"Jurusan   : {mhs['jurusan']}\n" \
-           f"Email     : {mhs['email']}\n\n" \
-           f"Pesan ini dikirim otomatis oleh Admin Portal Kelas."
+
+@app.route('/api/import/excel', methods=['POST'])
+@login_required
+def import_excel():
+    if 'file' not in request.files:
+        return jsonify({'error': 'Tidak ada file yang diunggah.'}), 400
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'error': 'Tidak ada file yang dipilih.'}), 400
+    if not file.filename.lower().endswith(('.xlsx', '.xlsm')):
+        return jsonify({'error': 'Format file harus .xlsx atau .xlsm.'}), 400
+
+    mode = request.form.get('mode', 'skip')
+    if mode not in ('skip', 'update'):
+        mode = 'skip'
 
     try:
-        sender_identity = os.getenv('MAIL_DEFAULT_SENDER', 'khlazieeed@gmail.com')
-        msg = Message(subject, sender=sender_identity, recipients=[target_email])
-        msg.body = body
-        mail.send(msg)
-        return redirect(url_for('data_kelas', toast_type='success', toast_msg=f"📩 Sukses kirim email ke {mhs['name']}!"))
+        file_bytes = file.read()
+        result = manager.import_from_excel_bytes(file_bytes, mode)
+        return jsonify({'success': True, **result})
+    except ImportError as e:
+        return jsonify({'error': str(e)}), 500
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
-        return redirect(url_for('data_kelas', toast_type='error', toast_msg=f"❌ Gagal kirim email: {str(e)}"))
+        return jsonify({'error': f'Gagal mengimpor file: {e}'}), 500
 
-@app.route('/upload_students', methods=['POST'])
-def upload_students():
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    file = request.files.get('file')
-    if not file or file.filename == '':
-        return redirect(url_for('dashboard', toast_type='error', toast_msg='❌ Tidak ada file yang dipilih!'))
 
-    added, skipped, errors = parse_upload(file)
+@app.route('/api/mahasiswa/<nim>/email', methods=['POST'])
+@login_required
+def send_email(nim):
+    mhs = manager.find_by_nim(nim)
+    if not mhs:
+        return jsonify({'error': f'Mahasiswa NIM {nim} tidak ditemukan.'}), 404
+    if not mhs.email:
+        return jsonify({'error': f'Mahasiswa {mhs.nama} tidak memiliki alamat email.'}), 400
 
-    if added == 0 and errors:
-        return redirect(url_for('dashboard', toast_type='error', toast_msg=f"❌ Import gagal: {errors[0]}"))
+    body = request.get_json() or {}
+    subject = (body.get('subject') or '').strip() or f'Informasi Akademik — {mhs.nama}'
+    message = (body.get('message') or '').strip()
+    if not message:
+        message = (
+            f'Halo {mhs.nama},\n\n'
+            f'Berikut informasi akademik Anda saat ini:\n'
+            f'NIM: {mhs.nim}\nProgram Studi: {mhs.prodi}\nIPK: {mhs.ipk:.2f}\n\n'
+            f'Terima kasih.'
+        )
 
-    # FIX: hanya kirim notifikasi jika MAIL_PASSWORD sudah diset
-    if added > 0 and os.getenv('MAIL_PASSWORD'):
-        kirim_notifikasi(os.getenv('ADMIN_EMAIL', 'khlazieeed@gmail.com'), f'Import Massal: {added} Mahasiswa Baru',
-            f'{added} data mahasiswa baru berhasil diimport ke kelas 03TPLP002. {skipped} data dilewati.')
+    try:
+        EmailService.send(mhs.email, subject, message, nama=mhs.nama)
+        return jsonify({'success': True, 'message': f'Email berhasil dikirim ke {mhs.email}'})
+    except (RuntimeError, ValueError) as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Terjadi kesalahan tidak terduga: {e}'}), 500
 
-    if skipped == 0:
-        msg, ttype = f"✅ {added} mahasiswa berhasil diimport!", 'success'
-    else:
-        msg, ttype = f"✅ {added} diimport, ⚠️ {skipped} dilewati (duplikat/kosong)", 'warning'
-
-    return redirect(url_for('dashboard', toast_type=ttype, toast_msg=msg))
-
-@app.route('/download_template')
-def download_template():
-    if 'logged_in' not in session: return redirect(url_for('login'))
-    csv_content  = "name,nim,ipk,hadir,status,jurusan,email\n"
-    csv_content += "Budi Santoso,241011450010,3.55,13,Aktif,Teknik Informatika,budi@example.com\n"
-    csv_content += "Siti Rahayu,241011450011,3.80,14,Aktif,Teknik Informatika,siti@example.com\n"
-    csv_content += "Andi Prasetyo,241011450012,2.90,10,Nonaktif,Teknik Informatika,andi@example.com\n"
-    return Response(csv_content, mimetype='text/csv',
-        headers={'Content-Disposition': 'attachment; filename=template_import_mahasiswa.csv'})
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
 
 if __name__ == '__main__':
+    print("=" * 50)
+    print("  MahasiswaCRUD - Flask Server")
+    print("  Buka: http://127.0.0.1:5000")
+    print("=" * 50)
     app.run(debug=True)
